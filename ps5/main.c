@@ -37,6 +37,7 @@
 #define AUTOTEST_PLUGIN USER_PATH "/plugin/ps5-autotest.js"
 #define AUTOTEST_SOURCE "/app0/assets/autotest/ps5-autotest.js"
 #define AUTOTEST_SECONDS_PER_PARK 20
+#define AUTOTEST_NEXT_FILE USER_PATH "/ps5-autotest-next"
 
 int openrct2_main(int argc, const char **argv);
 
@@ -121,11 +122,15 @@ static int is_scenario(const char *name)
 }
 
 /*
- * Install the scenario tour plugin (ps5/autotest/ps5-autotest.js), prefixed
- * with the list of installed scenarios, which plugins cannot read themselves.
+ * Install the autotest plugin (ps5/autotest/ps5-autotest.js), prefixed with
+ * the list of installed scenarios, which plugins cannot read themselves. In
+ * play mode, also pick the next scenario to play (one per launch) and return
+ * its path for the command line; otherwise return NULL.
  */
-static void install_autotest(void)
+static const char *install_autotest(void)
 {
+    static char play_path[512];
+    const char *play = NULL;
     char *names[512];
     int count = 0;
     DIR *dir = opendir(RCT2_PATH "/Scenarios");
@@ -140,12 +145,22 @@ static void install_autotest(void)
     }
     qsort(names, count, sizeof(names[0]), compare_names);
 
+#ifdef OPENRCT2_PS5_AUTOTEST_PLAY
+    if (count > 0) {
+        int next = read_marker(AUTOTEST_NEXT_FILE) % count;
+        write_marker(AUTOTEST_NEXT_FILE, next + 1);
+        snprintf(play_path, sizeof(play_path), "%s/Scenarios/%s", RCT2_PATH, names[next]);
+        play = play_path;
+        printf("openrct2-ps5: autotest playing scenario %d/%d: %s\n", next + 1, count, names[next]);
+    }
+#endif
+
     mkdir(USER_PATH "/plugin", 0755);
     FILE *in = fopen(AUTOTEST_SOURCE, "rb");
     FILE *out = fopen(AUTOTEST_PLUGIN, "wb");
     if (in && out) {
-        fprintf(out, "var PS5_AUTOTEST = { secondsPerPark: %d, scenarios: [\n",
-                AUTOTEST_SECONDS_PER_PARK);
+        fprintf(out, "var PS5_AUTOTEST = { mode: \"%s\", play: \"%s\", secondsPerPark: %d, scenarios: [\n",
+                play ? "play" : "tour", play ? play : "", AUTOTEST_SECONDS_PER_PARK);
         for (int i = 0; i < count; i++) {
             fprintf(out, "    \"%s/Scenarios/%s\",\n", RCT2_PATH, names[i]);
         }
@@ -168,6 +183,7 @@ static void install_autotest(void)
     for (int i = 0; i < count; i++) {
         free(names[i]);
     }
+    return play;
 }
 #endif
 
@@ -208,8 +224,9 @@ int main(void)
     mkdir(USER_PATH, 0755);
     install_default_config();
     reset_caches();
+    const char *play = NULL;
 #ifdef OPENRCT2_PS5_AUTOTEST
-    install_autotest();
+    play = install_autotest();
 #else
     remove(AUTOTEST_PLUGIN);
 #endif
@@ -219,17 +236,24 @@ int main(void)
     SDL_SetHint(SDL_HINT_FRAMEBUFFER_ACCELERATION, "0");
     show_loading_screen();
 
-    const char *argv[] = {
-        "openrct2",
+    /* OpenRCT2 wants a park to open (autotest play mode) before any option. */
+    const char *argv[16];
+    int argc = 0;
+    argv[argc++] = "openrct2";
+    if (play) {
+        argv[argc++] = play;
+    }
 #ifdef OPENRCT2_PS5_DEBUG
-        "--verbose",
+    argv[argc++] = "--verbose";
 #endif
-        "--openrct2-data-path", DATA_PATH,
-        "--rct2-data-path", RCT2_PATH,
-        "--user-data-path", USER_PATH,
-        NULL,
-    };
-    int rc = openrct2_main((int)(sizeof(argv) / sizeof(argv[0])) - 1, argv);
+    argv[argc++] = "--openrct2-data-path";
+    argv[argc++] = DATA_PATH;
+    argv[argc++] = "--rct2-data-path";
+    argv[argc++] = RCT2_PATH;
+    argv[argc++] = "--user-data-path";
+    argv[argc++] = USER_PATH;
+    argv[argc] = NULL;
+    int rc = openrct2_main(argc, argv);
     printf("openrct2-ps5: exited with %d\n", rc);
     return rc;
 }

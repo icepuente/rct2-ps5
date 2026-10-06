@@ -68,7 +68,8 @@ Everything except the game's `Install` folder is uploaded. `ObjData` file names 
 | Triangle | Rotate the view (Return) |
 | Square | Close the top window (Backspace) |
 | Options | Cancel / close (Escape) |
-| D-pad, others | Passed to OpenRCT2. Bind them under *Options → Controls → Shortcut keys* |
+| D-pad | Jump the cursor to the nearest button in that direction. Steps through dropdown items and list rows; hold to repeat |
+| Others | Passed to OpenRCT2. Bind them under *Options → Controls → Shortcut keys* |
 
 ## Validation and known limits
 
@@ -92,7 +93,11 @@ Known limits:
 
 ### Automated testing
 
-`OPENRCT2_PS5_AUTOTEST=1 scripts/build.sh openrct2` builds a title that installs [`ps5/autotest/ps5-autotest.js`](ps5/autotest/ps5-autotest.js). On the title screen, the plugin tours every installed scenario. It loads each one, runs it at the fastest speed for 20 seconds, and logs a line per scenario: whether it loaded, how fast the simulation ran, guests and rating. The tour repeats, with a summary after each pass. Leave the game on the title screen and read the results from the kernel log. Normal builds remove the plugin.
+There are two modes.
+
+**Play** (`OPENRCT2_PS5_AUTOTEST=play`): each launch opens the next scenario, and the plugin plays it. It opens the park, takes the maximum loan, hires a handyman, runs a marketing campaign and funds research. It then extends a footpath and builds and opens a stall on a path reachable from the park entrance. Finally it fast-forwards a year, logging guests, rating, cash and stall customers each month, and ends with a PASS or PARTIAL line.
+
+**Tour** (`OPENRCT2_PS5_AUTOTEST=tour`): `scripts/build.sh openrct2` with that setting builds a title that installs [`ps5/autotest/ps5-autotest.js`](ps5/autotest/ps5-autotest.js). On the title screen, the plugin tours every installed scenario. It loads each one, runs it at the fastest speed for 20 seconds, and logs a line per scenario: whether it loaded, how fast the simulation ran, guests and rating. The tour repeats, with a summary after each pass. Leave the game on the title screen and read the results from the kernel log. Normal builds remove the plugin.
 
 To debug, build with `OPENRCT2_PS5_DEBUG=1 scripts/build.sh openrct2`. That adds OpenRCT2's verbose log and an SDL display trace. Launch **klogsrv** and read the log:
 
@@ -115,6 +120,8 @@ Plain elfldr payloads run in the background and can't show video or take control
 | `ps5_emutls.c`, `ps5_thread_atexit.c` | Emulated TLS and `thread_local` destructors. |
 | `sdl/ps5_virtual_mouse.c` | The controller-driven cursor. |
 | `sdl/ps5_sdl_render.c` | Makes SDL's software renderer offer only 32-bit texture formats, matching the screen. |
+
+[`ps5/ui_snap.cpp`](ps5/ui_snap.cpp) gives the D-pad its targets. It reads OpenRCT2's open windows for clickable widgets, or an open dropdown's rows, and is compiled with OpenRCT2's own flags.
 
 [`scripts/check-imports.sh`](scripts/check-imports.sh) fails the build if any import would still resolve to a module the title doesn't load. Such an import would be a call to address 0 at run time.
 

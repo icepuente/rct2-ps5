@@ -11,6 +11,8 @@
  *   Cross        left mouse button     Circle    right mouse button
  *   L1 / R1      wheel down / up       Triangle  Return
  *   Square       Backspace             Options   Escape
+ *   D-pad        jump to the next button in that direction, when the app
+ *                installs ps5_snap_hook (OpenRCT2: ps5/ui_snap.cpp)
  *   Everything else passes through unchanged.
  */
 #include <math.h>
@@ -28,6 +30,20 @@ Sint16 __real_SDL_GameControllerGetAxis(SDL_GameController *controller,
                                         SDL_GameControllerAxis axis);
 /* Called after each present when set (by ps5_sdl_trace.c). */
 void (*ps5_present_hook)(SDL_Renderer *renderer);
+
+/*
+ * D-pad navigation, when set by the app: given a direction (0 left, 1 up,
+ * 2 right, 3 down) and the cursor, return 1 and the next cursor position.
+ */
+int (*ps5_snap_hook)(int dir, int x, int y, int *out_x, int *out_y);
+
+#define SNAP_REPEAT_DELAY 350 /* ms before a held D-pad repeats */
+#define SNAP_REPEAT_RATE 140
+
+static int snap_dir = -1;
+static Uint32 snap_next;
+
+static void snap(int dir);
 
 #define DEADZONE 7000
 #define MAX_SPEED 1400.0f /* pixels per second at full deflection */
@@ -103,9 +119,14 @@ static float stick(Sint16 value)
     return f * fabsf(f); /* fine control near the centre */
 }
 
-/* Once per frame: move the cursor by the left stick. */
+/* Once per frame: repeat a held D-pad, and move the cursor by the left stick. */
 static void move_cursor(void)
 {
+    if (snap_dir >= 0 && SDL_TICKS_PASSED(SDL_GetTicks(), snap_next)) {
+        snap(snap_dir);
+        snap_next = SDL_GetTicks() + SNAP_REPEAT_RATE;
+    }
+
     Uint64 now = SDL_GetPerformanceCounter();
     float dt = last_counter ? (float)(now - last_counter) / SDL_GetPerformanceFrequency() : 0.0f;
     last_counter = now;
@@ -142,6 +163,32 @@ static void move_cursor(void)
     ev.motion.xrel = (int)cursor_x - old_x;
     ev.motion.yrel = (int)cursor_y - old_y;
     push(&ev);
+}
+
+static void warp_cursor(int x, int y)
+{
+    int old_x = (int)cursor_x, old_y = (int)cursor_y;
+    cursor_x = (float)x;
+    cursor_y = (float)y;
+
+    SDL_Event ev = { 0 };
+    ev.motion.type = SDL_MOUSEMOTION;
+    ev.motion.timestamp = SDL_GetTicks();
+    ev.motion.windowID = window_id();
+    ev.motion.state = buttons;
+    ev.motion.x = x;
+    ev.motion.y = y;
+    ev.motion.xrel = x - old_x;
+    ev.motion.yrel = y - old_y;
+    push(&ev);
+}
+
+static void snap(int dir)
+{
+    int x, y;
+    if (ps5_snap_hook && ps5_snap_hook(dir, (int)cursor_x, (int)cursor_y, &x, &y)) {
+        warp_cursor(x, y);
+    }
 }
 
 static void mouse_button(Uint8 button, bool down)
@@ -222,6 +269,26 @@ static bool translate(const SDL_Event *ev)
         case SDL_CONTROLLER_BUTTON_START:
             key(SDL_SCANCODE_ESCAPE, down);
             return true;
+        case SDL_CONTROLLER_BUTTON_DPAD_LEFT:
+        case SDL_CONTROLLER_BUTTON_DPAD_UP:
+        case SDL_CONTROLLER_BUTTON_DPAD_RIGHT:
+        case SDL_CONTROLLER_BUTTON_DPAD_DOWN: {
+            if (!ps5_snap_hook) {
+                return false;
+            }
+            int dir = ev->cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_LEFT ? 0
+                    : ev->cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_UP   ? 1
+                    : ev->cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT ? 2
+                                                                            : 3;
+            if (down) {
+                snap(dir);
+                snap_dir = dir;
+                snap_next = SDL_GetTicks() + SNAP_REPEAT_DELAY;
+            } else if (snap_dir == dir) {
+                snap_dir = -1;
+            }
+            return true;
+        }
         }
         return false;
     }
