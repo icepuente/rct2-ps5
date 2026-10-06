@@ -2,7 +2,7 @@
 
 A native PS5 port of [OpenRCT2](https://github.com/OpenRCT2/OpenRCT2) v0.5.5, the open-source re-implementation of RollerCoaster Tycoon 2. It launches from the home screen of a jailbroken console. Bring your own game files.
 
-> **Status: early but playable.** On hardware, OpenRCT2 boots to the title screen with music, lists the RCT2 scenarios and loads them into a playable park. Longer play sessions, saving and loading, and every menu have not been tested yet.
+> **Status: early but playable.** On hardware, OpenRCT2 boots to the title screen with music and loads RCT2 scenarios into a playable park. Saving and loading games works. Long play sessions and every menu have not been tested yet.
 
 [Requirements](#requirements) · [Installation](#installation) · [Controls](#controls) · [Build from source](#building-and-layout)
 
@@ -77,6 +77,7 @@ Verified on hardware:
 - The title screen renders at about 60 fps with title music.
 - 2,518 objects, 204 track designs and 57 scenarios are indexed.
 - Scenario names are readable, and a scenario loads into a playable park.
+- Saving a game, and loading it again through OpenRCT2's own load window, works. Saves go to the title's `/download0` storage.
 - The controller-driven cursor works for clicking and scrolling.
 - The SDL2 test title (`tools/sdl-smoke`, `PPSA99998`) checks video, audio, the DualSense, the app heap and returning to the home screen on their own.
 
