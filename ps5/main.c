@@ -14,16 +14,71 @@
 #define RCT2_PATH "/app0/assets/rct2"
 #define USER_PATH "/download0/openrct2"
 #define DEFAULT_CONFIG "/app0/assets/config.ini"
+#define LOADING_SCREEN "/app0/assets/loading.bmp"
+
+/*
+ * Bump when ps5/assets/config.ini changes in a way existing installs need:
+ * the defaults are then reinstalled once over the player's config.
+ */
+#define CONFIG_DEFAULTS_VERSION 2
+#define CONFIG_VERSION_FILE USER_PATH "/ps5-config-version"
+
+/*
+ * Bump to make existing installs rebuild OpenRCT2's object, scenario and
+ * track indexes once (e.g. after an index was built by a broken build).
+ */
+#define CACHE_VERSION 5
+#define CACHE_VERSION_FILE USER_PATH "/ps5-cache-version"
 
 int openrct2_main(int argc, const char **argv);
 
-/* Install the TV-friendly default configuration on first run. */
-static void install_default_config(void)
+static int read_marker(const char *path)
 {
-    struct stat st;
-    if (stat(USER_PATH "/config.ini", &st) == 0) {
+    int value = 0;
+    FILE *f = fopen(path, "r");
+    if (f) {
+        if (fscanf(f, "%d", &value) != 1) {
+            value = 0;
+        }
+        fclose(f);
+    }
+    return value;
+}
+
+static void write_marker(const char *path, int value)
+{
+    FILE *f = fopen(path, "w");
+    if (f) {
+        fprintf(f, "%d\n", value);
+        fclose(f);
+    }
+}
+
+/* Delete OpenRCT2's indexes when CACHE_VERSION is newer than the installed one. */
+static void reset_caches(void)
+{
+    if (read_marker(CACHE_VERSION_FILE) >= CACHE_VERSION) {
         return;
     }
+    printf("openrct2-ps5: rebuilding indexes (cache v%d)\n", CACHE_VERSION);
+    remove(USER_PATH "/objects.idx");
+    remove(USER_PATH "/scenarios.idx");
+    remove(USER_PATH "/tracks.idx");
+    write_marker(CACHE_VERSION_FILE, CACHE_VERSION);
+}
+
+/*
+ * Install the TV-friendly default configuration on first run, and again when
+ * CONFIG_DEFAULTS_VERSION is newer than the installed one.
+ */
+static void install_default_config(void)
+{
+    int installed = read_marker(CONFIG_VERSION_FILE);
+    struct stat st;
+    if (stat(USER_PATH "/config.ini", &st) == 0 && installed >= CONFIG_DEFAULTS_VERSION) {
+        return;
+    }
+    printf("openrct2-ps5: installing default config (v%d)\n", CONFIG_DEFAULTS_VERSION);
 
     FILE *in = fopen(DEFAULT_CONFIG, "rb");
     FILE *out = fopen(USER_PATH "/config.ini", "wb");
@@ -40,6 +95,39 @@ static void install_default_config(void)
     if (out) {
         fclose(out);
     }
+
+    write_marker(CONFIG_VERSION_FILE, CONFIG_DEFAULTS_VERSION);
+}
+
+/*
+ * Show the loading screen until OpenRCT2 presents its first frame. The video
+ * subsystem stays initialised, so the PS5 keeps displaying the last flipped
+ * buffer while OpenRCT2 starts up (which takes a while on first launch).
+ */
+static void show_loading_screen(void)
+{
+    if (SDL_InitSubSystem(SDL_INIT_VIDEO) != 0) {
+        printf("openrct2-ps5: no loading screen: %s\n", SDL_GetError());
+        return;
+    }
+
+    SDL_Surface *image = SDL_LoadBMP(LOADING_SCREEN);
+    SDL_DisplayMode mode;
+    SDL_GetCurrentDisplayMode(0, &mode);
+    SDL_Window *window = SDL_CreateWindow("OpenRCT2", 0, 0, mode.w, mode.h, 0);
+    SDL_Surface *screen = window ? SDL_GetWindowSurface(window) : NULL;
+
+    if (image && screen) {
+        SDL_BlitScaled(image, NULL, screen, NULL);
+        SDL_UpdateWindowSurface(window);
+    } else {
+        printf("openrct2-ps5: no loading screen: %s\n", SDL_GetError());
+    }
+
+    SDL_FreeSurface(image);
+    if (window) {
+        SDL_DestroyWindow(window);
+    }
 }
 
 int main(void)
@@ -47,13 +135,18 @@ int main(void)
     printf("openrct2-ps5: starting\n");
     mkdir(USER_PATH, 0755);
     install_default_config();
+    reset_caches();
 
     /* The PS5 SDL port only has the software renderer. */
     SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
     SDL_SetHint(SDL_HINT_FRAMEBUFFER_ACCELERATION, "0");
+    show_loading_screen();
 
     const char *argv[] = {
         "openrct2",
+#ifdef OPENRCT2_PS5_DEBUG
+        "--verbose",
+#endif
         "--openrct2-data-path", DATA_PATH,
         "--rct2-data-path", RCT2_PATH,
         "--user-data-path", USER_PATH,

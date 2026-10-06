@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
 # Package the cross-compiled OpenRCT2 (scripts/build-openrct2.sh) as the
 # native title PPSA99702. Runs inside the toolchain container.
+#
+# OPENRCT2_PS5_DEBUG=1 adds OpenRCT2's verbose log and the SDL display trace
+# to the kernel log.
 set -euo pipefail
+
+DEBUG="${OPENRCT2_PS5_DEBUG:-0}"
+DEBUG_CFLAGS=()
+[[ "${DEBUG}" == 1 ]] && DEBUG_CFLAGS+=(-DOPENRCT2_PS5_DEBUG)
 
 TITLE_ID=PPSA99702
 BUILD=build/openrct2
@@ -19,16 +26,16 @@ UI_MAIN="${BUILD}/CMakeFiles/openrct2.dir/src/openrct2-ui/Ui.cpp.o"
 "${OBJCOPY}" --redefine-sym main=openrct2_main "${UI_MAIN}" "${WORK}/Ui.cpp.o"
 mapfile -t UI_OBJS < <(find "${BUILD}/CMakeFiles/openrct2.dir" -name '*.o' ! -path "${UI_MAIN}" | sort)
 
-"${CC}" -std=gnu11 -O2 -Wall -I"${PS5_SYSROOT}${PS5_HBROOT}/include" \
+"${CC}" -std=gnu11 -O2 -Wall "${DEBUG_CFLAGS[@]}" -I"${PS5_SYSROOT}${PS5_HBROOT}/include" \
     -c ps5/main.c -o "${WORK}/main.o"
 
 rm -rf "${STAGE}"
 mkdir -p "${STAGE}"
 cp -a "${DATA}" "${STAGE}/openrct2"
 rm -rf "${STAGE}/openrct2/shaders" # OpenGL only
-cp ps5/assets/config.ini "${STAGE}/config.ini"
+cp ps5/assets/config.ini ps5/assets/loading.bmp "${STAGE}/"
 
-PS5_VIRTUAL_MOUSE=1 scripts/package-native.sh "build/dist/${TITLE_ID}" ps5/sce_sys "${STAGE}" \
+PS5_SDL_APP=1 PS5_SDL_TRACE="${DEBUG}" scripts/package-native.sh "build/dist/${TITLE_ID}" ps5/sce_sys "${STAGE}" \
     "${WORK}/main.o" "${WORK}/Ui.cpp.o" "${UI_OBJS[@]}" \
     --start-group \
     "${BUILD}/libopenrct2.a" \

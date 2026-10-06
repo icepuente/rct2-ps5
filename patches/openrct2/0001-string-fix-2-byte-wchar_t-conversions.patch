@@ -1,0 +1,26 @@
+diff --git a/src/openrct2/core/String.cpp b/src/openrct2/core/String.cpp
+index 89143081e0..333aa14162 100644
+--- a/src/openrct2/core/String.cpp
++++ b/src/openrct2/core/String.cpp
+@@ -63,8 +63,8 @@ namespace OpenRCT2::String
+     #if U_SIZEOF_WCHAR_T == 4
+         icu::UnicodeString str = icu::UnicodeString::fromUTF32(reinterpret_cast<const UChar32*>(src.data()), src.length());
+     #elif U_SIZEOF_WCHAR_T == 2
+-        std::wstring wstr = std::wstring(src);
+-        icu::UnicodeString str = icu::UnicodeString(static_cast<const wchar_t*>(wstr.c_str()));
++        icu::UnicodeString str = icu::UnicodeString(
++            reinterpret_cast<const char16_t*>(src.data()), static_cast<int32_t>(src.length()));
+     #else
+         #error Unsupported U_SIZEOF_WCHAR_T size
+     #endif
+@@ -98,8 +98,9 @@ namespace OpenRCT2::String
+         str.toUTF32(reinterpret_cast<UChar32*>(&result[0]), str.length(), status);
+ 
+     #elif U_SIZEOF_WCHAR_T == 2
++        // getBuffer() is not NUL-terminated, so copy by length.
+         const char16_t* buffer = str.getBuffer();
+-        std::wstring result = static_cast<wchar_t*>(buffer);
++        std::wstring result(reinterpret_cast<const wchar_t*>(buffer), static_cast<size_t>(str.length()));
+ 
+     #else
+         #error Unsupported U_SIZEOF_WCHAR_T size

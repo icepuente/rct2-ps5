@@ -57,7 +57,7 @@ def main():
     top = os.path.basename(local_dir)
 
     files = []
-    for root, dirs, names in os.walk(local_dir):
+    for root, dirs, names in os.walk(local_dir, followlinks=True):
         dirs[:] = sorted(d for d in dirs if d not in excludes)
         for name in sorted(n for n in names if n not in excludes):
             path = os.path.join(root, name)

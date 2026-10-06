@@ -379,6 +379,11 @@ int scandir(const char *path, struct dirent ***out,
 {
     DIR *dir = opendir(path);
     if (!dir) {
+        static int reported;
+        if (!reported) {
+            reported = 1;
+            printf("scandir: cannot open %s: %s\n", path, strerror(errno));
+        }
         return -1;
     }
 

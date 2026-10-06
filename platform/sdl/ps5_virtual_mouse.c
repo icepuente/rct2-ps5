@@ -3,7 +3,7 @@
  *
  * The PS5 has no mouse cursor, so the controller drives one: SDL calls the app
  * makes are redirected here with lld --wrap (scripts/package-native.sh with
- * PS5_VIRTUAL_MOUSE=1), which turns controller input into mouse and key
+ * PS5_SDL_APP=1), which turns controller input into mouse and key
  * events and draws the cursor before each frame is presented.
  *
  *   Left stick   move the cursor (accelerates with deflection)
@@ -26,6 +26,8 @@ int __real_SDL_ShowCursor(int toggle);
 void __real_SDL_RenderPresent(SDL_Renderer *renderer);
 Sint16 __real_SDL_GameControllerGetAxis(SDL_GameController *controller,
                                         SDL_GameControllerAxis axis);
+/* Called after each present when set (by ps5_sdl_trace.c). */
+void (*ps5_present_hook)(SDL_Renderer *renderer);
 
 #define DEADZONE 7000
 #define MAX_SPEED 1400.0f /* pixels per second at full deflection */
@@ -233,6 +235,15 @@ static bool translate(const SDL_Event *ev)
 
 int __wrap_SDL_PollEvent(SDL_Event *event)
 {
+    /*
+     * Controller button events need the game controller subsystem, which an
+     * app that only initialises SDL_INIT_JOYSTICK (OpenRCT2) never starts.
+     */
+    if (!SDL_WasInit(SDL_INIT_GAMECONTROLLER) && SDL_WasInit(SDL_INIT_VIDEO)) {
+        SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER);
+        controller();
+    }
+
     if (frame_started) {
         frame_started = false;
         move_cursor();
@@ -408,4 +419,7 @@ void __wrap_SDL_RenderPresent(SDL_Renderer *renderer)
         SDL_SetRenderTarget(renderer, target);
     }
     __real_SDL_RenderPresent(renderer);
+    if (ps5_present_hook) {
+        ps5_present_hook(renderer);
+    }
 }

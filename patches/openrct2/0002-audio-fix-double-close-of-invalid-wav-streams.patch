@@ -1,0 +1,59 @@
+diff --git a/src/openrct2-ui/audio/WavAudioSource.cpp b/src/openrct2-ui/audio/WavAudioSource.cpp
+index 72e13b79b2..2bbf5536a8 100644
+--- a/src/openrct2-ui/audio/WavAudioSource.cpp
++++ b/src/openrct2-ui/audio/WavAudioSource.cpp
+@@ -32,13 +32,14 @@ namespace OpenRCT2::Audio
+         uint64_t _dataLength{};
+ 
+     public:
++        // On failure the constructor throws without closing rw; the caller owns
++        // it until construction succeeds (it closes rw in its catch block).
+         WavAudioSource(SDL_RWops* rw)
+             : _rw(rw)
+         {
+             auto chunkId = SDL_ReadLE32(rw);
+             if (chunkId != kChunkIdRIFF)
+             {
+-                SDL_RWclose(rw);
+                 throw std::runtime_error("Not a WAV file");
+             }
+ 
+@@ -47,14 +48,12 @@ namespace OpenRCT2::Audio
+             auto chunkFormat = SDL_ReadLE32(rw);
+             if (chunkFormat != kChunkIdWAVE)
+             {
+-                SDL_RWclose(rw);
+                 throw std::runtime_error("Not in WAVE format");
+             }
+ 
+             auto fmtChunkSize = FindChunk(rw, kChunkIdFMT);
+             if (!fmtChunkSize)
+             {
+-                SDL_RWclose(rw);
+                 throw std::runtime_error("Could not find FMT chunk");
+             }
+ 
+@@ -63,7 +62,6 @@ namespace OpenRCT2::Audio
+             auto encoding = SDL_ReadLE16(rw);
+             if (encoding != kPCMFormat)
+             {
+-                SDL_RWclose(rw);
+                 throw std::runtime_error("Not in PCM format");
+             }
+ 
+@@ -81,7 +79,6 @@ namespace OpenRCT2::Audio
+                     _format.format = AUDIO_S16LSB;
+                     break;
+                 default:
+-                    SDL_RWclose(rw);
+                     throw std::runtime_error("Unsupported bits per sample");
+             }
+ 
+@@ -90,7 +87,6 @@ namespace OpenRCT2::Audio
+             auto dataChunkSize = FindChunk(rw, kChunkIdDATA);
+             if (dataChunkSize == 0)
+             {
+-                SDL_RWclose(rw);
+                 throw std::runtime_error("Could not find DATA chunk");
+             }
+ 

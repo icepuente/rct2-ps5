@@ -11,11 +11,14 @@
  * Check a new binary with scripts/check-imports.sh.
  */
 #include <ctype.h>
+#include <pthread.h>
 #include <errno.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/types.h>
+#include <sys/sysctl.h>
 
 int sceKernelLoadStartModule(const char *, size_t, const void *, unsigned int,
                              void *, int *);
@@ -90,17 +93,54 @@ LAZY_IMPORT(ime_dialog_module, "libSceImeDialog.sprx", int, MODULE_UNAVAILABLE,
             sceImeDialogTerm, (void), ())
 
 /*
- * A native title has no stdout, so console output goes to the kernel log
- * (read it with klogsrv on port 3232).
+ * A native title has no stdout or stderr, so writes to them go to the kernel
+ * log (read it with klogsrv on port 3232), one line at a time. printf and
+ * friends are defined here; vfprintf, fputs, fputc, fwrite and fflush are
+ * wrapped by scripts/package-native.sh so other streams still work.
  */
 int sceKernelDebugOutText(int, const char *);
+int __real_vfprintf(FILE *, const char *, va_list);
+int __real_fputs(const char *, FILE *);
+int __real_fputc(int, FILE *);
+size_t __real_fwrite(const void *, size_t, size_t, FILE *);
+int __real_fflush(FILE *);
+
+static pthread_mutex_t log_lock = PTHREAD_MUTEX_INITIALIZER;
+static char log_line[1024];
+static size_t log_len;
+
+static void log_flush_locked(void)
+{
+    if (log_len > 0) {
+        log_line[log_len] = '\0';
+        sceKernelDebugOutText(0, log_line);
+        log_len = 0;
+    }
+}
+
+static void log_write(const char *s, size_t n)
+{
+    pthread_mutex_lock(&log_lock);
+    for (size_t i = 0; i < n; i++) {
+        log_line[log_len++] = s[i];
+        if (s[i] == '\n' || log_len == sizeof(log_line) - 1) {
+            log_flush_locked();
+        }
+    }
+    pthread_mutex_unlock(&log_lock);
+}
+
+static int is_console(FILE *stream)
+{
+    return stream == stdout || stream == stderr;
+}
 
 int vprintf(const char *fmt, va_list ap)
 {
     char buf[1024];
     int n = vsnprintf(buf, sizeof(buf), fmt, ap);
 
-    sceKernelDebugOutText(0, buf);
+    log_write(buf, n < 0 ? 0 : (size_t)n < sizeof(buf) ? (size_t)n : sizeof(buf) - 1);
     return n;
 }
 
@@ -116,7 +156,22 @@ int printf(const char *fmt, ...)
 
 int puts(const char *s)
 {
-    return printf("%s\n", s);
+    log_write(s, strlen(s));
+    log_write("\n", 1);
+    return 0;
+}
+
+#undef putchar
+int putchar(int c)
+{
+    char ch = (char)c;
+    log_write(&ch, 1);
+    return c;
+}
+
+int __wrap_vfprintf(FILE *stream, const char *fmt, va_list ap)
+{
+    return is_console(stream) ? vprintf(fmt, ap) : __real_vfprintf(stream, fmt, ap);
 }
 
 int fprintf(FILE *stream, const char *fmt, ...)
@@ -124,10 +179,50 @@ int fprintf(FILE *stream, const char *fmt, ...)
     va_list ap;
 
     va_start(ap, fmt);
-    int n = (stream == stdout || stream == stderr) ? vprintf(fmt, ap)
-                                                   : vfprintf(stream, fmt, ap);
+    int n = __wrap_vfprintf(stream, fmt, ap);
     va_end(ap);
     return n;
+}
+
+int __wrap_fputs(const char *s, FILE *stream)
+{
+    if (!is_console(stream)) {
+        return __real_fputs(s, stream);
+    }
+    log_write(s, strlen(s));
+    return 0;
+}
+
+int __wrap_fputc(int c, FILE *stream)
+{
+    if (!is_console(stream)) {
+        return __real_fputc(c, stream);
+    }
+    char ch = (char)c;
+    log_write(&ch, 1);
+    return c;
+}
+
+size_t __wrap_fwrite(const void *ptr, size_t size, size_t n, FILE *stream)
+{
+    if (!is_console(stream)) {
+        return __real_fwrite(ptr, size, n, stream);
+    }
+    log_write(ptr, size * n);
+    return n;
+}
+
+int __wrap_fflush(FILE *stream)
+{
+    if (!stream || is_console(stream)) {
+        pthread_mutex_lock(&log_lock);
+        log_flush_locked();
+        pthread_mutex_unlock(&log_lock);
+        if (stream) {
+            return 0;
+        }
+    }
+    return __real_fflush(stream);
 }
 
 /*
@@ -170,6 +265,69 @@ void ZSTD_trace_decompress_end(unsigned long long ctx, const void *trace)
 {
     (void)ctx;
     (void)trace;
+}
+
+/*
+ * The sandbox refuses KERN_PROC_PATHNAME, which apps use to find their own
+ * executable (OpenRCT2 treats the failure as fatal). Answer it with the
+ * title's eboot; pass every other query through.
+ */
+int __real_sysctl(const int *, unsigned int, void *, size_t *, const void *, size_t);
+
+int __wrap_sysctl(const int *name, unsigned int namelen, void *oldp, size_t *oldlenp,
+                  const void *newp, size_t newlen)
+{
+    static const char exe_path[] = "/app0/eboot.bin";
+
+    if (namelen == 4 && name[0] == CTL_KERN && name[1] == KERN_PROC &&
+        name[2] == KERN_PROC_PATHNAME && !newp) {
+        if (oldp) {
+            if (!oldlenp || *oldlenp < sizeof(exe_path)) {
+                errno = ENOMEM;
+                return -1;
+            }
+            memcpy(oldp, exe_path, sizeof(exe_path));
+        }
+        if (oldlenp) {
+            *oldlenp = sizeof(exe_path);
+        }
+        return 0;
+    }
+    return __real_sysctl(name, namelen, oldp, oldlenp, newp, newlen);
+}
+
+/*
+ * A native title cannot start other processes. Fail cleanly instead of
+ * calling a null import (OpenRCT2 probes for zenity this way).
+ */
+pid_t fork(void)
+{
+    errno = ENOSYS;
+    return -1;
+}
+
+pid_t vfork(void)
+{
+    errno = ENOSYS;
+    return -1;
+}
+
+int system(const char *command)
+{
+    /* system(NULL) asks whether a shell exists. */
+    if (!command) {
+        return 0;
+    }
+    errno = ENOSYS;
+    return -1;
+}
+
+FILE *popen(const char *command, const char *mode)
+{
+    (void)command;
+    (void)mode;
+    errno = ENOSYS;
+    return NULL;
 }
 
 /*

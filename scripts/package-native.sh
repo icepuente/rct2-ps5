@@ -10,8 +10,11 @@
 #   ASSETS_DIR   folder copied to /app0/assets, or - for none
 #   INPUT...     objects, static archives and linker flags, in link order
 #
-# Set PS5_VIRTUAL_MOUSE=1 for mouse-driven SDL2 apps: the controller then
-# drives a cursor (platform/sdl/ps5_virtual_mouse.c).
+# Set PS5_SDL_APP=1 for mouse-driven SDL2 renderer apps: the controller then
+# drives a cursor (platform/sdl/ps5_virtual_mouse.c) and the software renderer
+# offers only 32-bit texture formats (platform/sdl/ps5_sdl_render.c).
+# PS5_SDL_TRACE=1 logs display setup and the first frames
+# (platform/sdl/ps5_sdl_trace.c).
 set -euo pipefail
 
 TITLE_DIR="$1"
@@ -48,8 +51,11 @@ for src in "${PLATFORM}"/*.c; do
     PLATFORM_OBJS+=("${obj}")
 done
 
-if [[ "${PS5_VIRTUAL_MOUSE:-0}" == 1 ]]; then
-    for src in "${PLATFORM}"/sdl/*.c; do
+SDL_SOURCES=()
+[[ "${PS5_SDL_APP:-0}" == 1 ]] && SDL_SOURCES+=("${PLATFORM}/sdl/ps5_virtual_mouse.c" "${PLATFORM}/sdl/ps5_sdl_render.c")
+[[ "${PS5_SDL_TRACE:-0}" == 1 ]] && SDL_SOURCES+=("${PLATFORM}/sdl/ps5_sdl_trace.c")
+if (( ${#SDL_SOURCES[@]} > 0 )); then
+    for src in "${SDL_SOURCES[@]}"; do
         obj="${WORK}/$(basename "${src}" .c).o"
         "${CC}" -std=gnu11 -O2 -Wall -I"${PS5_SYSROOT}${PS5_HBROOT}/include/SDL2" \
             -D_REENTRANT -c "${src}" -o "${obj}"
@@ -65,15 +71,21 @@ sed -e 's|KEEP(\*(\.eh_frame_hdr))|PROVIDE_HIDDEN(__eh_frame_hdr_start = .); KEE
     "${NATIVE}/tooling/native/ps5-pie.ld" > "${LDSCRIPT}"
 [[ $(grep -c '__eh_frame' "${LDSCRIPT}") == 2 ]] || { echo "ps5-pie.ld changed; update the eh_frame patch" >&2; exit 1; }
 
-# Route allocations to the app heap in platform/ps5_heap.c, and exit() to
-# the system close request in platform/ps5_native_shims.c.
-WRAPS=(--wrap=exit)
+# Route allocations to the app heap in platform/ps5_heap.c, and exit(),
+# sysctl() and console stdio to platform/ps5_native_shims.c.
+WRAPS=(--wrap=exit --wrap=sysctl --wrap=vfprintf --wrap=fputs --wrap=fputc --wrap=fwrite --wrap=fflush)
 for sym in malloc calloc realloc free memalign aligned_alloc posix_memalign malloc_usable_size; do
     WRAPS+=("--wrap=${sym}")
 done
-if [[ "${PS5_VIRTUAL_MOUSE:-0}" == 1 ]]; then
+if [[ "${PS5_SDL_APP:-0}" == 1 ]]; then
     for sym in SDL_PollEvent SDL_GetMouseState SDL_WarpMouseInWindow SDL_ShowCursor \
-               SDL_RenderPresent SDL_GameControllerGetAxis; do
+               SDL_RenderPresent SDL_GameControllerGetAxis SDL_GetRendererInfo; do
+        WRAPS+=("--wrap=${sym}")
+    done
+fi
+if [[ "${PS5_SDL_TRACE:-0}" == 1 ]]; then
+    for sym in SDL_CreateWindow SDL_CreateRenderer SDL_CreateTexture SDL_SetWindowSize \
+               SDL_SetWindowFullscreen; do
         WRAPS+=("--wrap=${sym}")
     done
 fi

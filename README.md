@@ -2,14 +2,15 @@
 
 A native PS5 port of [OpenRCT2](https://github.com/OpenRCT2/OpenRCT2) v0.5.5, the open-source re-implementation of RollerCoaster Tycoon 2. It launches from the home screen of a jailbroken console. Bring your own game files.
 
-> **Status: work in progress.** The toolchain, native-title packaging and an SDL2 test title (video, audio, DualSense, clean exit) are verified on hardware. OpenRCT2 builds, links and installs, but its first launch on the console has not been validated yet.
+> **Status: early but playable.** On hardware, OpenRCT2 boots to the title screen with music, lists the RCT2 scenarios and loads them into a playable park. Longer play sessions, saving and loading, and every menu have not been tested yet.
 
 [Requirements](#requirements) · [Installation](#installation) · [Controls](#controls) · [Build from source](#building-and-layout)
 
 ## Features
 
 - Native folder title (`PPSA99702`), registered by ShadowMountPlus and started from the home screen. No PKG is needed.
-- OpenRCT2 v0.5.5 is built from unmodified upstream source as a pinned submodule. Every PS5 difference is handled at link time in [`platform/`](platform).
+- An original loading screen covers startup. The first launch indexes 2,518 objects, which takes about 20 seconds.
+- OpenRCT2 v0.5.5 is built from upstream source as a pinned submodule. PS5 differences are handled at link time in [`platform/`](platform). Two small upstream bug fixes are applied from [`patches/openrct2`](patches/openrct2).
 - Software rendering at 1920×1080 through the PS5 SDL2 port, with the interface scaled 2× for the TV.
 - A DualSense-driven mouse cursor. OpenRCT2 is mouse-driven, so the controller moves a drawn pointer (see [Controls](#controls)).
 - Sound effects and music through SDL2 audio.
@@ -53,7 +54,7 @@ There are no prebuilt releases yet; [build from source](#building-and-layout) fi
 
 3. ShadowMountPlus adds **OpenRCT2** to the home screen. Launch it from there.
 
-Only the game's `Data`, `ObjData`, `Scenarios`, `Tracks`, `Landscapes` and `Saved Games` folders are uploaded. Nothing from the game is ever added to this repository.
+Everything except the game's `Install` folder is uploaded. `ObjData` file names are uppercased, because OpenRCT2 looks objects up by uppercase name and the console's filesystem is case-sensitive. Nothing from the game is ever added to this repository.
 
 ## Controls
 
@@ -71,22 +72,23 @@ Only the game's `Data`, `ObjData`, `Scenarios`, `Tracks`, `Landscapes` and `Save
 
 ## Validation and known limits
 
-Verified on hardware with the SDL2 test title (`tools/sdl-smoke`, `PPSA99998`):
+Verified on hardware:
 
-- 1080p video;
-- 48 kHz stereo audio;
-- DualSense buttons and sticks;
-- the 376 MiB app heap;
-- returning to the home screen without a crash.
+- The title screen renders at about 60 fps with title music.
+- 2,518 objects, 204 track designs and 57 scenarios are indexed.
+- Scenario names are readable, and a scenario loads into a playable park.
+- The controller-driven cursor works for clicking and scrolling.
+- The SDL2 test title (`tools/sdl-smoke`, `PPSA99998`) checks video, audio, the DualSense, the app heap and returning to the home screen on their own.
 
-Not yet verified: OpenRCT2 itself on the console. Known limits:
+Known limits:
 
 - **No networking.** Multiplayer, the server list and update checks are disabled.
 - **Sprite fonts only.** TrueType fonts are disabled, so the Chinese, Japanese and Korean translations, which need TTF, won't render properly.
-- **Placeholder art.** The icon and backgrounds are the boilerplate's. `PPSA99702` is a development title ID.
+- **Placeholder icon and backgrounds.** They're the boilerplate's. `PPSA99702` is a development title ID.
 - **No on-screen keyboard yet.** Naming parks and rides with the PS5 keyboard dialog is untested.
+- **The "What's new" window is empty** on first launch, because OpenRCT2's `doc/` files aren't packaged.
 
-To debug, launch **klogsrv** and read the console log; the title writes its stdout there:
+To debug, build with `OPENRCT2_PS5_DEBUG=1 scripts/build.sh openrct2`. That adds OpenRCT2's verbose log and an SDL display trace. Launch **klogsrv** and read the log:
 
 ```bash
 nc 192.168.0.134 3232
@@ -103,12 +105,20 @@ Plain elfldr payloads run in the background and can't show video or take control
 | `ps5_heap.c` | An allocator on a large flexible-memory mapping. The default libc heap fails at 8 MB. |
 | `ps5_native_shims.c` | Lazy loading of modules a title doesn't preload (keyboard, IME, random). Replacements for functions only `libScePosixForWebKit` exports. stdout goes to the kernel log, and `exit()` asks the system to close the app. |
 | `ps5_libc_compat.c` | C-locale versions of the locale and libc functions that libc++ needs. |
+| `ps5_dirent.c` | `opendir`/`readdir` on the kernel's `getdents`. The console libc lists nothing for a title, and `getdents` needs a 64 KiB buffer. |
 | `ps5_emutls.c`, `ps5_thread_atexit.c` | Emulated TLS and `thread_local` destructors. |
 | `sdl/ps5_virtual_mouse.c` | The controller-driven cursor. |
+| `sdl/ps5_sdl_render.c` | Makes SDL's software renderer offer only 32-bit texture formats, matching the screen. |
 
 [`scripts/check-imports.sh`](scripts/check-imports.sh) fails the build if any import would still resolve to a module the title doesn't load. Such an import would be a call to address 0 at run time.
 
-The PS5 SDL2 port gets one patch ([`deps/SDL2`](deps/SDL2)). It falls back to a smaller video-memory reservation when the process budget can't fit two 4K framebuffers.
+A few upstream fixes are carried as patches:
+
+- **PS5 SDL2 port** ([`deps/SDL2`](deps/SDL2)): falls back to a smaller video-memory reservation when the process budget can't fit two 4K framebuffers.
+- **ICU** ([`deps/icu`](deps/icu)): takes `wchar_t`'s size from the compiler. It's 2 bytes on the PS5 target, but ICU assumes 4 on BSD.
+- **OpenRCT2** ([`patches/openrct2`](patches/openrct2), applied at build time):
+  - fixes the 2-byte `wchar_t` string conversions;
+  - fixes a double free when a WAV stream fails to parse.
 
 ## Building and layout
 
@@ -128,11 +138,13 @@ The title folder is written to `build/dist/PPSA99702`. `scripts/build.sh smoke-n
 docker/      toolchain image: payload SDK + pacbrew libraries
 deps/        extra packages for the image: ICU (filtered), nlohmann/json, patched SDL2
 native/      ps5-native-app-boilerplate (submodule)
-openrct2/    OpenRCT2 v0.5.5 (submodule, unmodified)
+openrct2/    OpenRCT2 v0.5.5 (submodule)
+patches/     fixes applied to the OpenRCT2 source at build time
 platform/    runtime shims linked into every native title
 ps5/         OpenRCT2 launcher, title metadata, default config
 scripts/     build, package, import check, upload and data install
-tools/       sdl-smoke (SDL2 test title), dmem-probe (payload memory probe)
+tools/       sdl-smoke (SDL2 test title), dmem-probe (payload memory probe),
+             make-loading-screen.py (draws ps5/assets/loading.bmp)
 ```
 
 ## Credits and license

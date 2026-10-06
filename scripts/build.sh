@@ -20,5 +20,5 @@ if ! docker image inspect "${IMAGE}" >/dev/null 2>&1; then
     docker build -f "${ROOT}/docker/Dockerfile" -t "${IMAGE}" "${ROOT}"
 fi
 
-docker run --rm -v "${ROOT}":/work -w /work "${IMAGE}" \
+docker run --rm -v "${ROOT}":/work -w /work -e OPENRCT2_PS5_DEBUG "${IMAGE}" \
     bash -c "source \$PS5_PAYLOAD_SDK/toolchain/prospero.sh && ${CMD}"

@@ -2,7 +2,7 @@ pkgname=ps5-payload-icu
 pkgver=77.1
 _pkgver_=${pkgver/./_}
 _pkgver_tag=${pkgver/./-}
-pkgrel=1
+pkgrel=2
 pkgdesc='International Components for Unicode (trimmed to the converters OpenRCT2 uses)'
 arch=('any')
 url='https://icu.unicode.org'
@@ -26,6 +26,12 @@ prepare() {
     # raw data sources from the separate data archive.
     rm -rf icu/source/data
     mv data icu/source/data
+
+    # ICU assumes a 4-byte wchar_t on BSD, but the PS5 target's is 2 bytes.
+    # Prefer the compiler's own size when it reports one.
+    sed -i '/^#ifdef U_SIZEOF_WCHAR_T$/{n;s|$|\n#elif defined(__SIZEOF_WCHAR_T__)\n#   define U_SIZEOF_WCHAR_T __SIZEOF_WCHAR_T__|}' \
+        icu/source/common/unicode/platform.h
+    [ "$(grep -c '__SIZEOF_WCHAR_T__' icu/source/common/unicode/platform.h)" = 2 ]
 }
 
 build() {
