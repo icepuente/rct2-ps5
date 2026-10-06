@@ -38,6 +38,8 @@
 #define AUTOTEST_SOURCE "/app0/assets/autotest/ps5-autotest.js"
 #define AUTOTEST_SECONDS_PER_PARK 20
 #define AUTOTEST_NEXT_FILE USER_PATH "/ps5-autotest-next"
+/* Optional: a scenario file name to play instead of the next one in order. */
+#define AUTOTEST_PICK_FILE "/app0/assets/autotest/play.txt"
 
 int openrct2_main(int argc, const char **argv);
 
@@ -147,8 +149,24 @@ static const char *install_autotest(void)
 
 #ifdef OPENRCT2_PS5_AUTOTEST_PLAY
     if (count > 0) {
-        int next = read_marker(AUTOTEST_NEXT_FILE) % count;
-        write_marker(AUTOTEST_NEXT_FILE, next + 1);
+        int next = -1;
+        char pick[256] = "";
+        FILE *f = fopen(AUTOTEST_PICK_FILE, "r");
+        if (f) {
+            if (fgets(pick, sizeof(pick), f)) {
+                pick[strcspn(pick, "\r\n")] = '\0';
+            }
+            fclose(f);
+        }
+        for (int i = 0; pick[0] && i < count; i++) {
+            if (strcasecmp(names[i], pick) == 0) {
+                next = i;
+            }
+        }
+        if (next < 0) {
+            next = read_marker(AUTOTEST_NEXT_FILE) % count;
+            write_marker(AUTOTEST_NEXT_FILE, next + 1);
+        }
         snprintf(play_path, sizeof(play_path), "%s/Scenarios/%s", RCT2_PATH, names[next]);
         play = play_path;
         printf("openrct2-ps5: autotest playing scenario %d/%d: %s\n", next + 1, count, names[next]);

@@ -15,7 +15,8 @@ for patch in patches/openrct2/*.patch; do
 done
 
 # DOCDIR (OpenRCT2's licence and changelog) becomes /app0/assets/doc: the
-# install prefix is only used for that, since nothing is installed.
+# install prefix is only used for that, since nothing is installed. ICU is
+# located explicitly: FindICU only found it through the old install prefix.
 #
 # OpenRCT2 builds with -fno-char8_t, but nlohmann/json's C++20 std::filesystem
 # conversions need char8_t. OpenRCT2 doesn't serialise paths, so turn them off.
@@ -28,6 +29,9 @@ EXTRA_LIBS="${PS5_SYSROOT}${PS5_HBROOT}/lib/libicudata.a"
 ${CMAKE} -S "${SRC}" -B "${BUILD}" -G Ninja \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DCMAKE_PREFIX_PATH="${PS5_SYSROOT}${PS5_HBROOT}" \
+    -DICU_INCLUDE_DIR="${PS5_SYSROOT}${PS5_HBROOT}/include" \
+    -DICU_UC_LIBRARY_RELEASE="${PS5_SYSROOT}${PS5_HBROOT}/lib/libicuuc.a" \
+    -DICU_DATA_LIBRARY_RELEASE="${PS5_SYSROOT}${PS5_HBROOT}/lib/libicudata.a" \
     -DCMAKE_CXX_FLAGS="${CXX_FLAGS}" \
     -DSTATIC=OFF \
     -DDISABLE_IPO=ON \
