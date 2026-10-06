@@ -2,7 +2,7 @@
 """Draw ps5/assets/loading.bmp, the screen shown while OpenRCT2 starts.
 
 Original artwork: a night sky and a coaster track silhouette. Needs Pillow and
-the DejaVu fonts; scripts/make-loading-screen.sh runs it in a container.
+the DejaVu fonts; scripts/make-art.sh runs it in a container.
 """
 import math
 import sys
