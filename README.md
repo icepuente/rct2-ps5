@@ -25,7 +25,7 @@ A native PS5 port of [OpenRCT2](https://github.com/OpenRCT2/OpenRCT2) v0.5.5, th
   - **ShadowMountPlus**, to register folder titles;
   - **PS5 Web File Manager** (port 8888), which the upload scripts use.
 
-  Developed with the Relapse jailbreak (firmware 7.00–13.60) and PLK's Payload Manager. Other firmware and loader combinations have not been tested.
+  Tested on firmware **13.60** with the Relapse jailbreak and PLK's Payload Manager. Other firmware and loader combinations have not been tested.
 - Your own copy of **RollerCoaster Tycoon 2**, for example the Steam *Triple Thrill Pack* (app 285330) or GOG. About 700 MB of it is uploaded.
 - About 1 GB of free console storage.
 - To build: macOS or Linux with Docker. Apple Silicon with Colima is tested.
