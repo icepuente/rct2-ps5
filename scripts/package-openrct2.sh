@@ -56,6 +56,8 @@ mkdir -p "${STAGE}"
 cp -a "${DATA}" "${STAGE}/openrct2"
 rm -rf "${STAGE}/openrct2/shaders" # OpenGL only
 cp ps5/assets/config.ini ps5/assets/loading.bmp "${STAGE}/"
+# OpenRCT2's licence and changelog ("What's new"), found through DOCDIR.
+[[ -d build/openrct2-doc ]] && cp -a build/openrct2-doc "${STAGE}/doc"
 if [[ "${AUTOTEST}" != 0 ]]; then
     mkdir -p "${STAGE}/autotest"
     cp ps5/autotest/ps5-autotest.js "${STAGE}/autotest/"

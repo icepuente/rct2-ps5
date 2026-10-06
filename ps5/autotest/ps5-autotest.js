@@ -250,12 +250,15 @@ function findSite() {
     return null;
 }
 
+/* A stall to build: food sells fastest, then drinks, then anything else. */
 function stallObject() {
     var rides = objectManager.getAllObjects("ride");
-    for (var i = 0; i < rides.length; i++) {
-        var t = rides[i].rideType[0];
-        if (t === RIDE_TYPE_FOOD_STALL || t === RIDE_TYPE_DRINK_STALL || t === RIDE_TYPE_SHOP) {
-            return rides[i];
+    var preference = [RIDE_TYPE_FOOD_STALL, RIDE_TYPE_DRINK_STALL, RIDE_TYPE_SHOP];
+    for (var p = 0; p < preference.length; p++) {
+        for (var i = 0; i < rides.length; i++) {
+            if (rides[i].rideType[0] === preference[p]) {
+                return rides[i];
+            }
         }
     }
     return null;

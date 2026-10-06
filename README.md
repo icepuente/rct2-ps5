@@ -4,7 +4,7 @@ A native PS5 port of [OpenRCT2](https://github.com/OpenRCT2/OpenRCT2) v0.5.5, th
 
 > **Status: early but playable.** On hardware, OpenRCT2 boots to the title screen with music and loads RCT2 scenarios into a playable park. Saving and loading games works. Long play sessions and every menu have not been tested yet.
 
-[Requirements](#requirements) · [Installation](#installation) · [Controls](#controls) · [Build from source](#building-and-layout)
+[Download](https://github.com/icepuente/rct2-ps5/releases) · [Requirements](#requirements) · [Installation](#installation) · [Controls](#controls) · [Build from source](#building-and-layout)
 
 ## Features
 
@@ -23,38 +23,33 @@ A native PS5 port of [OpenRCT2](https://github.com/OpenRCT2/OpenRCT2) v0.5.5, th
   - an ELF loader (elfldr);
   - **kstuff**, to run fake-signed titles;
   - **ShadowMountPlus**, to register folder titles;
-  - **PS5 Web File Manager** (port 8888), which the upload scripts use.
+  - a way to copy files to the console: ps5upload, FTP or PS5 Web File Manager.
 
   Tested on firmware **13.60** with the Relapse jailbreak and PLK's Payload Manager. Other firmware and loader combinations have not been tested.
 - Your own copy of **RollerCoaster Tycoon 2**, for example the Steam *Triple Thrill Pack* (app 285330) or GOG. About 700 MB of it is uploaded.
 - About 1 GB of free console storage.
-- To build: macOS or Linux with Docker. Apple Silicon with Colima is tested.
+- To build from source (not needed to play): macOS or Linux with Docker. Apple Silicon with Colima is tested.
 
 ## Installation
 
-There are no prebuilt releases yet; [build from source](#building-and-layout) first. Then, with the console's IP address:
+1. Download `OpenRCT2-PS5-<version>.zip` from [Releases](https://github.com/icepuente/rct2-ps5/releases) and extract it. It contains a `PPSA99702` folder and a short `README.txt`.
+2. Copy these folders from your own RollerCoaster Tycoon 2 installation into `PPSA99702/assets/rct2`:
 
-1. Upload the title:
+   `Data`, `ObjData`, `Scenarios`, `Tracks`, `Landscapes` and `Saved Games`
 
-   ```bash
-   PS5_HOST=192.168.0.134 scripts/upload.py build/dist/PPSA99702 /data/homebrew
-   ```
+   The folder is right when `PPSA99702/assets/rct2/Data/g1.dat` exists. The console's filesystem is case-sensitive, and OpenRCT2 looks objects up by uppercase name, so files in `ObjData` need uppercase names. Some copies ship `wallsign.dat`, `ssig4.dat` and `Cerberus.dat`; rename them to `WALLSIGN.DAT`, `SSIG4.DAT` and `CERBERUS.DAT`.
+3. Upload the whole `PPSA99702` folder to your console's homebrew folder, e.g. `/data/homebrew/PPSA99702`. Use ps5upload, FTP or a file manager such as PS5 Web File Manager.
+4. ShadowMountPlus (or your loader) registers the folder, and **OpenRCT2** appears on the home screen.
 
-2. Upload your RCT2 files into the title. The folder is the game's install directory, the one containing `Data/g1.dat`:
+The first start shows a loading screen for about 20 seconds while OpenRCT2 indexes its objects. Later starts are faster.
 
-   ```bash
-   PS5_HOST=192.168.0.134 scripts/install-game-data.sh /path/to/rct2
-   ```
+**Updating:** close the game and replace everything in `PPSA99702` except `assets/rct2`. Saves and settings live in the title's own storage, so updates keep them.
 
-   Steam won't download this Windows-only game on macOS, but SteamCMD will download the depot:
+**Getting the game files on a Mac or Linux PC:** Steam won't install the Windows-only Triple Thrill Pack there, but SteamCMD can download it:
 
-   ```bash
-   steamcmd +login YOUR_STEAM_USERNAME +download_depot 285330 285331 +quit
-   ```
-
-3. ShadowMountPlus adds **OpenRCT2** to the home screen. Launch it from there.
-
-Everything except the game's `Install` folder is uploaded. `ObjData` file names are uppercased, because OpenRCT2 looks objects up by uppercase name and the console's filesystem is case-sensitive. Nothing from the game is ever added to this repository.
+```bash
+steamcmd +login YOUR_STEAM_USERNAME +download_depot 285330 285331 +quit
+```
 
 ## Controls
 
@@ -147,17 +142,35 @@ scripts/fetch-openrct2-data.sh
 scripts/build.sh openrct2
 ```
 
-The title folder is written to `build/dist/PPSA99702`. `scripts/build.sh smoke-native` builds the SDL2 test title.
+The title folder is written to `build/dist/PPSA99702`.
+
+To build a release zip, run `scripts/make-release.sh v0.1.0`, which writes `build/release/OpenRCT2-PS5-v0.1.0.zip`. The [Release workflow](.github/workflows/release.yml) does the same on GitHub. Pushing a `v*` tag publishes a GitHub Release; running the workflow by hand produces a downloadable artifact.
+
+### Development
+
+These scripts shorten the edit-test loop against a console running PS5 Web File Manager (port 8888):
+
+```bash
+# Install or update the built title (only changed files are needed).
+PS5_HOST=192.168.0.134 scripts/upload.py build/dist/PPSA99702 /data/homebrew
+# Upload RCT2 files from a local install; ObjData names are uppercased.
+PS5_HOST=192.168.0.134 scripts/install-game-data.sh /path/to/rct2
+```
+
+- `scripts/build.sh smoke-native` builds the SDL2 test title.
+- `OPENRCT2_PS5_DEBUG=1` adds verbose logs.
+- `OPENRCT2_PS5_AUTOTEST=play|tour` builds the automated tests (see [Automated testing](#automated-testing)).
 
 ```text
+.github/     release workflow
 docker/      toolchain image: payload SDK + pacbrew libraries
 deps/        extra packages for the image: ICU (filtered), nlohmann/json, patched SDL2
 native/      ps5-native-app-boilerplate (submodule)
-openrct2/    OpenRCT2 v0.5.5 (submodule)
+openrct2/    OpenRCT2 v0.5.5 (submodule; openrct2.version pins its data release)
 patches/     fixes applied to the OpenRCT2 source at build time
 platform/    runtime shims linked into every native title
-ps5/         OpenRCT2 launcher, title metadata, default config, autotest plugin
-scripts/     build, package, import check, upload and data install
+ps5/         OpenRCT2 launcher, D-pad navigation, title metadata, default config, autotest plugin
+scripts/     build, package, release, import check, upload and data install
 tools/       sdl-smoke (SDL2 test title), dmem-probe (payload memory probe),
              make-loading-screen.py (draws ps5/assets/loading.bmp)
 ```
@@ -170,4 +183,4 @@ tools/       sdl-smoke (SDL2 test title), dmem-probe (payload memory probe),
 - The approach to libc++ compatibility follows [morrowind-ps5](https://github.com/mshivam019/morrowind-ps5) and the Ship of Harkinian PS5 port.
 - [ICU](https://icu.unicode.org) (Unicode License), [nlohmann/json](https://github.com/nlohmann/json) (MIT), libpng, zlib, libzip, zstd, FLAC, Ogg/Vorbis and libsamplerate, each under its own license.
 
-This project is licensed under the GPL-3.0-or-later; see [LICENSE](LICENSE). It is not affiliated with or endorsed by Sony Interactive Entertainment, Atari or the OpenRCT2 team. RollerCoaster Tycoon 2 is the property of its respective owners and is not included.
+This project is licensed under the GPL-3.0-or-later; see [LICENSE](LICENSE). Bundled components are listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). It is not affiliated with or endorsed by Sony Interactive Entertainment, Atari or the OpenRCT2 team. RollerCoaster Tycoon 2 is the property of its respective owners and is not included.

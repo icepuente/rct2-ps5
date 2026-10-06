@@ -1,0 +1,67 @@
+name: Release
+
+# Builds the PPSA99702 title folder and packages it as a release zip.
+# Pushing a tag such as v0.1.0 also publishes a GitHub Release with the zip;
+# running the workflow by hand only uploads the zip as a workflow artifact.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the toolchain image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          tags: ps5-openrct2-env:latest
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and package
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          [[ "${GITHUB_REF_TYPE}" == tag ]] || VERSION="dev-${GITHUB_SHA::7}"
+          echo "VERSION=${VERSION}" >> "${GITHUB_ENV}"
+          scripts/make-release.sh "${VERSION}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OpenRCT2-PS5-${{ env.VERSION }}
+          path: build/release/OpenRCT2-PS5-*
+          if-no-files-found: error
+
+      - name: Publish the release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ZIP="build/release/OpenRCT2-PS5-${VERSION}.zip"
+          {
+            echo "OpenRCT2 v0.5.5 for jailbroken PS5 as a native title (PPSA99702)."
+            echo
+            echo "1. Extract the zip and copy your RollerCoaster Tycoon 2 files into \`PPSA99702/assets/rct2\`."
+            echo "2. Upload the \`PPSA99702\` folder to your console's homebrew folder (e.g. \`/data/homebrew/\`) with ps5upload, FTP or a file manager."
+            echo "3. Start **OpenRCT2** from the home screen once ShadowMountPlus has registered it."
+            echo
+            echo "No game data is included. See the [README](https://github.com/${GITHUB_REPOSITORY}#readme) for requirements and controls."
+            echo
+            echo "SHA-256: \`$(cut -d' ' -f1 "${ZIP}.sha256")\`"
+          } > release-notes.md
+          gh release create "${VERSION}" "${ZIP}" "${ZIP}.sha256" \
+            --title "OpenRCT2 PS5 ${VERSION}" --notes-file release-notes.md

@@ -20,5 +20,13 @@ if ! docker image inspect "${IMAGE}" >/dev/null 2>&1; then
     docker build -f "${ROOT}/docker/Dockerfile" -t "${IMAGE}" "${ROOT}"
 fi
 
-docker run --rm -v "${ROOT}":/work -w /work -e OPENRCT2_PS5_DEBUG -e OPENRCT2_PS5_AUTOTEST "${IMAGE}" \
+# On Linux hosts (e.g. CI) the checkout belongs to the host user, so build as
+# that user; Docker Desktop and Colima on macOS map ownership themselves.
+USER_ARGS=()
+if [[ "$(uname -s)" == Linux ]]; then
+    USER_ARGS=(--user "$(id -u):$(id -g)" -e HOME=/tmp)
+fi
+
+docker run --rm -v "${ROOT}":/work -w /work ${USER_ARGS[@]+"${USER_ARGS[@]}"} \
+    -e OPENRCT2_PS5_DEBUG -e OPENRCT2_PS5_AUTOTEST "${IMAGE}" \
     bash -c "source \$PS5_PAYLOAD_SDK/toolchain/prospero.sh && ${CMD}"

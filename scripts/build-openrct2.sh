@@ -14,6 +14,9 @@ for patch in patches/openrct2/*.patch; do
     patch -d "${SRC}" -p1 -s -N < "${patch}" || { echo "cannot apply ${patch}" >&2; exit 1; }
 done
 
+# DOCDIR (OpenRCT2's licence and changelog) becomes /app0/assets/doc: the
+# install prefix is only used for that, since nothing is installed.
+#
 # OpenRCT2 builds with -fno-char8_t, but nlohmann/json's C++20 std::filesystem
 # conversions need char8_t. OpenRCT2 doesn't serialise paths, so turn them off.
 CXX_FLAGS="-DJSON_HAS_FILESYSTEM=0 -DJSON_HAS_EXPERIMENTAL_FILESYSTEM=0"
@@ -29,6 +32,8 @@ ${CMAKE} -S "${SRC}" -B "${BUILD}" -G Ninja \
     -DSTATIC=OFF \
     -DDISABLE_IPO=ON \
     -DCMAKE_CXX_STANDARD_LIBRARIES="${EXTRA_LIBS}" \
+    -DCMAKE_INSTALL_PREFIX=/app0 \
+    -DCMAKE_INSTALL_DOCDIR=assets/doc \
     -DDISABLE_OPENGL=ON \
     -DDISABLE_NETWORK=ON \
     -DDISABLE_HTTP=ON \

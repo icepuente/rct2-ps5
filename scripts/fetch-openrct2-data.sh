@@ -4,10 +4,16 @@
 # submodule. Generating it from source needs a host build of OpenRCT2.
 #
 # Usage: scripts/fetch-openrct2-data.sh [OUT_DIR]   (default: build/openrct2-data)
+# The release's doc/ folder (licence, changelog) goes to OUT_DIR/../openrct2-doc.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="$(git -C "${ROOT}/openrct2" describe --tags --exact-match)"
+# The release matching the openrct2 submodule (CI checkouts have no tags).
+VERSION="$(cat "${ROOT}/openrct2.version")"
+if TAG="$(git -C "${ROOT}/openrct2" describe --tags --exact-match 2>/dev/null)" && [[ "${TAG}" != "${VERSION}" ]]; then
+    echo "openrct2 submodule is at ${TAG}, but openrct2.version says ${VERSION}" >&2
+    exit 1
+fi
 OUT="${1:-${ROOT}/build/openrct2-data}"
 CACHE="${ROOT}/build/cache"
 ASSET="OpenRCT2-${VERSION}-Linux-noble-x86_64.tar.gz"
@@ -25,4 +31,10 @@ STRIP="$(awk -F/ '{print NF}' <<< "${DATA_PATH}")"
 rm -rf "${OUT}"
 mkdir -p "${OUT}"
 tar -xzf "${ASSET}" -C "${OUT}" --strip-components="${STRIP}" "${DATA_PATH}"
+
+DOC_OUT="$(dirname "${OUT}")/openrct2-doc"
+DOC_PATH="${DATA_PATH%/data}/doc"
+rm -rf "${DOC_OUT}"
+mkdir -p "${DOC_OUT}"
+tar -xzf "${ASSET}" -C "${DOC_OUT}" --strip-components="${STRIP}" "${DOC_PATH}"
 echo "OpenRCT2 ${VERSION} data -> ${OUT} ($(du -sh "${OUT}" | cut -f1))"
