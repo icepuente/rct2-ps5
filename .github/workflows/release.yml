@@ -33,6 +33,16 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # Build the boilerplate's host tools and libc.prx runtime shim on the
+      # runner, as the boilerplate's own CI does (its libc-builder crashes
+      # inside the toolchain container on x86-64). package-native.sh reuses them.
+      - name: Build the native-title tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes clang-18 lld-18 make ninja-build ccache pkg-config tar unzip wget
+          make -C native deps libc
+          bash native/tools/build-host-tools.sh
+
       - name: Build and package
         run: |
           VERSION="${GITHUB_REF_NAME}"
