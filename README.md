@@ -76,6 +76,7 @@ Verified on hardware:
 
 - The title screen renders at about 60 fps with title music.
 - 2,518 objects, 204 track designs and 57 scenarios are indexed.
+- The automated scenario tour loaded and ran all 57 RCT2 scenarios with no crashes or load failures. Each ran at 6.4–7.8× real time against an 8× target. The busiest park was Six Flags Holland, with 2,781 guests at 7.3×. A full pass takes 21 minutes.
 - Scenario names are readable, and a scenario loads into a playable park.
 - Saving a game, and loading it again through OpenRCT2's own load window, works. Saves go to the title's `/download0` storage.
 - The controller-driven cursor works for clicking and scrolling.

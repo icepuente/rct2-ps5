@@ -9,11 +9,12 @@
  * It builds a title sequence that loads each scenario, runs it at fast speed
  * and moves on, and logs one line per scenario to the console (echoed to the
  * PS5 kernel log; read it with klogsrv on port 3232):
- *   autotest: [12/57] Crazy Castle: ok, 2.4x real time, 312 guests, rating 650
+ *   autotest: [12/57] Crazy Castle: ok, 7.5x real time (target 8x), 312 guests, rating 650
  * The tour repeats, logging a summary after each pass.
  */
 
 var SPEED = 4; /* the title sequence's fastest speed */
+var TARGET = Math.pow(2, SPEED - 1); /* speed n runs 2^(n-1) times real time */
 var TICKS_PER_SECOND = 40; /* game ticks per second at normal speed */
 
 function log(message) {
@@ -76,7 +77,7 @@ function main() {
         var seconds = (Date.now() - current.start) / 1000;
         var ratio = seconds > 0 ? current.ticks / (seconds * TICKS_PER_SECOND) : 0;
         log("[" + current.index + "/" + total + "] " + current.name + ": ok, " +
-            ratio.toFixed(1) + "x real time (target " + SPEED + "x), " +
+            ratio.toFixed(1) + "x real time (target " + TARGET + "x), " +
             park.guests + " guests, rating " + park.rating + ", cash " + park.cash / 10);
         if (slowest === null || ratio < slowest.ratio) {
             slowest = { name: current.name, ratio: ratio };
