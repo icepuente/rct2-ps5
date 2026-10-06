@@ -75,7 +75,8 @@ Verified on hardware:
 - The automated scenario tour loaded and ran all 57 RCT2 scenarios with no crashes or load failures. Each ran at 6.4–7.8× real time against an 8× target. The busiest park was Six Flags Holland, with 2,781 guests at 7.3×. A full pass takes 21 minutes.
 - Scenario names are readable, and a scenario loads into a playable park.
 - Saving a game, and loading it again through OpenRCT2's own load window, works. Saves go to the title's `/download0` storage.
-- The controller-driven cursor works for clicking and scrolling.
+- The controller-driven cursor works for clicking and scrolling. D-pad snapping moves between buttons, dropdown items and list rows.
+- The automated play test opens the park, takes a loan, hires staff, builds a path and a stall, and plays a year at 8× speed. That's verified on several scenarios.
 - The SDL2 test title (`tools/sdl-smoke`, `PPSA99998`) checks video, audio, the DualSense, the app heap and returning to the home screen on their own.
 
 Known limits:

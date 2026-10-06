@@ -26,7 +26,8 @@ curl -fsSL -o "sha256sums-${VERSION}.txt" "${BASE}/OpenRCT2-${VERSION}-sha256sum
 awk -v f="${ASSET}" '{sub(/^\.\//, "", $2)} $2 == f {print $1 "  " $2}' \
     "sha256sums-${VERSION}.txt" | grep . | shasum -a 256 -c -
 
-DATA_PATH="$(tar -tzf "${ASSET}" | grep -m1 -E '(^|/)data/g2\.dat$' | sed 's|/g2\.dat$||')"
+# awk reads the whole listing: stopping early (grep -m1) makes GNU tar fail.
+DATA_PATH="$(tar -tzf "${ASSET}" | awk '/(^|\/)data\/g2\.dat$/ && !found { sub(/\/g2\.dat$/, ""); print; found = 1 }')"
 STRIP="$(awk -F/ '{print NF}' <<< "${DATA_PATH}")"
 rm -rf "${OUT}"
 mkdir -p "${OUT}"

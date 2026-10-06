@@ -290,11 +290,24 @@ function runPlay(config) {
         log("play step " + (ok ? "ok" : "FAILED") + ": " + name + (detail ? " (" + detail + ")" : ""));
     }
 
-    /* Run a game action, then call next(result) once it has executed. */
-    function act(name, action, args, next) {
+    function skip(name, detail) {
+        log("play step skipped: " + name + " (refused by the scenario: " + detail + ")");
+    }
+
+    /*
+     * Run a game action, then call next(result) once it has executed. Optional
+     * actions may be refused by a scenario's rules (no marketing, a fixed loan,
+     * ...); that is logged as skipped rather than failed.
+     */
+    function act(name, action, args, next, optional) {
         context.executeAction(action, args, function (result) {
             var ok = !result.error;
-            step(name, ok, ok ? "" : result.errorTitle + ": " + result.errorMessage);
+            var detail = ok ? "" : result.errorTitle + ": " + result.errorMessage;
+            if (!ok && optional) {
+                skip(name, detail);
+            } else {
+                step(name, ok, detail);
+            }
             if (next) {
                 next(result);
             }
@@ -419,29 +432,39 @@ function runPlay(config) {
             money(park.maxBankLoan) + ", rides " + start.rides +
             ", park " + (park.getFlag("open") ? "open" : "closed"));
 
-        act("open the park", "parksetparameter", { parameter: PARK_PARAMETER_OPEN, value: 0 }, function () {
-        act("take the maximum loan", "parksetloan", { value: park.maxBankLoan }, function () {
-            act("hire a handyman", "staffhire", {
-                autoPosition: true, staffType: STAFF_HANDYMAN, costumeIndex: 0,
-                staffOrders: HANDYMAN_ALL_ORDERS
-            }, function () {
-                act("start a park marketing campaign", "parkmarketing",
-                    { type: MARKETING_PARK, item: 0, duration: 4 }, function () {
-                    act("fund research", "parksetresearchfunding",
-                        { priorities: RESEARCH_ALL_CATEGORIES, fundingAmount: RESEARCH_MAXIMUM }, function () {
-                        construct(function () {
-                            act("fast-forward", "gamesetspeed", { speed: SPEED }, function () {
-                                lastMonth = date.month;
-                                tickStart = Date.now();
-                                context.subscribe("interval.tick", function () { ticks++; });
-                                context.subscribe("interval.day", onDay);
-                            });
-                        });
-                    });
-                });
+        /* Opening moves, in order. Scenario rules may refuse the optional ones. */
+        var moves = [
+            { name: "open the park", action: "parksetparameter",
+              args: { parameter: PARK_PARAMETER_OPEN, value: 0 } },
+            { name: "take the maximum loan", action: "parksetloan",
+              args: { value: park.maxBankLoan }, optional: true },
+            { name: "hire a handyman", action: "staffhire",
+              args: { autoPosition: true, staffType: STAFF_HANDYMAN, costumeIndex: 0,
+                      staffOrders: HANDYMAN_ALL_ORDERS } },
+            { name: "start a park marketing campaign", action: "parkmarketing",
+              args: { type: MARKETING_PARK, item: 0, duration: 4 }, optional: true },
+            { name: "fund research", action: "parksetresearchfunding",
+              args: { priorities: RESEARCH_ALL_CATEGORIES, fundingAmount: RESEARCH_MAXIMUM }, optional: true }
+        ];
+
+        function fastForward() {
+            act("fast-forward", "gamesetspeed", { speed: SPEED }, function () {
+                lastMonth = date.month;
+                tickStart = Date.now();
+                context.subscribe("interval.tick", function () { ticks++; });
+                context.subscribe("interval.day", onDay);
             });
-        });
-        });
+        }
+
+        function nextMove(i) {
+            if (i === moves.length) {
+                construct(fastForward);
+                return;
+            }
+            var m = moves[i];
+            act(m.name, m.action, m.args, function () { nextMove(i + 1); }, m.optional);
+        }
+        nextMove(0);
     }
 
     context.subscribe("map.changed", begin);
