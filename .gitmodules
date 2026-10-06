@@ -1,0 +1,6 @@
+[submodule "openrct2"]
+	path = openrct2
+	url = https://github.com/OpenRCT2/OpenRCT2.git
+[submodule "native"]
+	path = native
+	url = https://github.com/blackbearreloaded/ps5-native-app-boilerplate.git

@@ -1,0 +1,25 @@
+pkgname=ps5-payload-nlohmann-json
+pkgver=3.12.0
+pkgrel=1
+pkgdesc='JSON for Modern C++ (header-only)'
+arch=('any')
+url='https://github.com/nlohmann/json'
+license=('MIT')
+options=(!strip)
+source=("json-include-${pkgver}.zip::https://github.com/nlohmann/json/releases/download/v${pkgver}/include.zip")
+sha256sums=('b8cb0ef2dd7f57f18933997c9934bb1fa962594f701cd5a8d3c2c80541559372')
+groups=('ps5-payload-dev')
+makedepends=('ps5-payload-sdk')
+
+prepare() {
+    if [ -z "${PS5_PAYLOAD_SDK}" ]; then
+	export PS5_PAYLOAD_SDK=/opt/ps5-payload-sdk
+    fi
+}
+
+package() {
+    source "${PS5_PAYLOAD_SDK}/toolchain/prospero.sh"
+
+    mkdir -p "${pkgdir}/${PS5_SYSROOT}/${PS5_HBROOT}/include"
+    cp -r single_include/nlohmann "${pkgdir}/${PS5_SYSROOT}/${PS5_HBROOT}/include/"
+}

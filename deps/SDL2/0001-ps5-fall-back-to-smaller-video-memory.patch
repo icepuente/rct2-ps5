@@ -1,0 +1,25 @@
+diff --git a/src/video/ps5/SDL_ps5video.c b/src/video/ps5/SDL_ps5video.c
+index a62be0e..c300d44 100644
+--- a/src/video/ps5/SDL_ps5video.c
++++ b/src/video/ps5/SDL_ps5video.c
+@@ -207,11 +207,16 @@ static int PS5_VideoInit(_THIS)
+     if (device_data->handle < 0) {
+         return SDL_SetError("sceVideoOutOpen: %s", strerror(errno));
+     }
++    // Reserve room for two 4K buffers, halving the reservation while it
++    // exceeds the process budget (e.g. elfldr payloads) and 1080p still fits.
+     device_data->memsize = 0x4000000;
+-    if (sceKernelAllocateMainDirectMemory(device_data->memsize, 0x20000, 3,
+-                                          &device_data->paddr)) {
+-        return SDL_SetError("sceKernelAllocateMainDirectMemory: %s",
+-                            strerror(errno));
++    while (sceKernelAllocateMainDirectMemory(device_data->memsize, 0x20000, 3,
++                                             &device_data->paddr)) {
++        if (device_data->memsize / 2 < PS5_Tilemap_BufferSize(mode.w, mode.h) * 2) {
++            return SDL_SetError("sceKernelAllocateMainDirectMemory: %s",
++                                strerror(errno));
++        }
++        device_data->memsize /= 2;
+     }
+ 
+     if (sceKernelMapDirectMemory(&vaddr, device_data->memsize, 0x33, 0,

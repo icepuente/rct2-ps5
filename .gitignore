@@ -1,0 +1,17 @@
+# Build output
+/build/
+*.elf
+
+# Original game data is copyrighted and must never be committed.
+/gamedata/
+*.dat
+*.DAT
+*.sv6
+*.SV6
+*.sc6
+*.SC6
+*.td6
+*.TD6
+
+# Logs
+*.log

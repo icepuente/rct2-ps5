@@ -1,0 +1,63 @@
+pkgname=ps5-payload-icu
+pkgver=77.1
+_pkgver_=${pkgver/./_}
+_pkgver_tag=${pkgver/./-}
+pkgrel=1
+pkgdesc='International Components for Unicode (trimmed to the converters OpenRCT2 uses)'
+arch=('any')
+url='https://icu.unicode.org'
+license=('Unicode-3.0')
+options=(!strip libtool staticlibs)
+source=("https://github.com/unicode-org/icu/releases/download/release-${_pkgver_tag}/icu4c-${_pkgver_}-src.tgz"
+        "https://github.com/unicode-org/icu/releases/download/release-${_pkgver_tag}/icu4c-${_pkgver_}-data.zip"
+        'filter.json')
+sha256sums=('588e431f77327c39031ffbb8843c0e3bc122c211374485fa87dc5f3faff24061'
+            '1e08bfafa442260ccabf9a872d4eab12de813d42b90769df056bab032b37e1d3'
+            'SKIP')
+groups=('ps5-payload-dev')
+makedepends=('ps5-payload-sdk' 'ps5-payload-libcxx')
+
+prepare() {
+    if [ -z "${PS5_PAYLOAD_SDK}" ]; then
+	export PS5_PAYLOAD_SDK=/opt/ps5-payload-sdk
+    fi
+
+    # The source tarball only ships prebuilt data; the data filter needs the
+    # raw data sources from the separate data archive.
+    rm -rf icu/source/data
+    mv data icu/source/data
+}
+
+build() {
+    # ICU cross-compilation needs the data tools built for the host first.
+    mkdir -p build-host
+    pushd build-host
+    env -u CFLAGS -u CXXFLAGS -u CPPFLAGS -u LDFLAGS \
+	../icu/source/configure --disable-tests --disable-samples \
+				--disable-extras --disable-icuio
+    make
+    popd
+
+    source "${PS5_PAYLOAD_SDK}/toolchain/prospero.sh"
+    mkdir -p build-ps5
+    cd build-ps5
+
+    ICU_DATA_FILTER_FILE="${srcdir}/filter.json" \
+    ../icu/source/configure --prefix="${PS5_HBROOT}" --host=x86_64-pc-freebsd \
+			    --with-cross-build="${srcdir}/build-host" \
+			    --enable-static --disable-shared \
+			    --with-data-packaging=static \
+			    --disable-tools --disable-tests --disable-samples \
+			    --disable-extras --disable-icuio --disable-layoutex
+    ${MAKE}
+}
+
+package() {
+    source "${PS5_PAYLOAD_SDK}/toolchain/prospero.sh"
+    cd build-ps5
+
+    export DESTDIR="${pkgdir}/${PS5_PAYLOAD_SDK}/target"
+    make install
+
+    ${PS5_CROSS_FIX_ROOT} "${DESTDIR}/${PS5_HBROOT}"
+}
