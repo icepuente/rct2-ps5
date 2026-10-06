@@ -1,0 +1,50 @@
+diff --git a/src/openrct2-ui/audio/FlacAudioSource.cpp b/src/openrct2-ui/audio/FlacAudioSource.cpp
+index 4972b733d9..685cb054d8 100644
+--- a/src/openrct2-ui/audio/FlacAudioSource.cpp
++++ b/src/openrct2-ui/audio/FlacAudioSource.cpp
+@@ -45,6 +45,12 @@ namespace OpenRCT2::Audio
+             Release();
+         }
+ 
++        // Give the stream back to the caller, which closes it when loading fails.
++        void DetachStream()
++        {
++            _rw = nullptr;
++        }
++
+         [[nodiscard]] uint64_t GetLength() const override
+         {
+             return _dataLength;
+@@ -326,6 +332,7 @@ namespace OpenRCT2::Audio
+         auto source = std::make_unique<FlacAudioSource>();
+         if (!source->LoadFlac(rw))
+         {
++            source->DetachStream();
+             throw std::runtime_error("Unable to load FLAC stream");
+         }
+         return source;
+diff --git a/src/openrct2-ui/audio/OggAudioSource.cpp b/src/openrct2-ui/audio/OggAudioSource.cpp
+index 4013107ae2..52a69bfe60 100644
+--- a/src/openrct2-ui/audio/OggAudioSource.cpp
++++ b/src/openrct2-ui/audio/OggAudioSource.cpp
+@@ -44,6 +44,12 @@ namespace OpenRCT2::Audio
+             Release();
+         }
+ 
++        // Give the stream back to the caller, which closes it when loading fails.
++        void DetachStream()
++        {
++            _rw = nullptr;
++        }
++
+         [[nodiscard]] uint64_t GetLength() const override
+         {
+             return _dataLength;
+@@ -160,6 +166,7 @@ namespace OpenRCT2::Audio
+         auto source = std::make_unique<OggAudioSource>();
+         if (!source->LoadOgg(rw))
+         {
++            source->DetachStream();
+             throw std::runtime_error("Unable to load OGG/vorbis stream");
+         }
+         return source;

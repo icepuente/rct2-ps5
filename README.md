@@ -119,7 +119,7 @@ A few upstream fixes are carried as patches:
 - **ICU** ([`deps/icu`](deps/icu)): takes `wchar_t`'s size from the compiler. It's 2 bytes on the PS5 target, but ICU assumes 4 on BSD.
 - **OpenRCT2** ([`patches/openrct2`](patches/openrct2), applied at build time):
   - fixes the 2-byte `wchar_t` string conversions;
-  - fixes a double free when a WAV stream fails to parse.
+  - fixes a double free when a WAV, OGG or FLAC stream fails to load.
 
 ## Building and layout
 
