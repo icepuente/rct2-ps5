@@ -1,0 +1,42 @@
+diff --git a/src/openrct2-ui/scripting/ScTitleSequence.hpp b/src/openrct2-ui/scripting/ScTitleSequence.hpp
+index 5536575e6d..a3194b5fc7 100644
+--- a/src/openrct2-ui/scripting/ScTitleSequence.hpp
++++ b/src/openrct2-ui/scripting/ScTitleSequence.hpp
+@@ -12,6 +12,7 @@
+ #ifdef ENABLE_SCRIPTING
+ 
+     #include <memory>
++    #include <openrct2/core/Path.hpp>
+     #include <openrct2/Context.h>
+     #include <openrct2/Game.h>
+     #include <openrct2/GameState.h>
+@@ -284,7 +285,7 @@ namespace OpenRCT2::Scripting
+                 if (index)
+                 {
+                     auto handle = OpenRCT2::Title::TitleSequenceGetParkHandle(*seq, *index);
+-                    auto isScenario = ParkImporter::ExtensionIsScenario(handle->HintPath);
++                    auto isScenario = ParkImporter::ExtensionIsScenario(Path::GetExtension(handle->HintPath));
+                     try
+                     {
+                         auto& objectMgr = GetContext()->GetObjectManager();
+diff --git a/src/openrct2-ui/title/TitleSequencePlayer.cpp b/src/openrct2-ui/title/TitleSequencePlayer.cpp
+index 91b944a216..920d1b1568 100644
+--- a/src/openrct2-ui/title/TitleSequencePlayer.cpp
++++ b/src/openrct2-ui/title/TitleSequencePlayer.cpp
+@@ -11,6 +11,7 @@
+ 
+ #include <memory>
+ #include <openrct2-ui/windows/Windows.h>
++#include <openrct2/core/Path.hpp>
+ #include <openrct2/Context.h>
+ #include <openrct2/Diagnostic.h>
+ #include <openrct2/Game.h>
+@@ -368,7 +369,7 @@ namespace OpenRCT2::Title
+                     WindowSetFlagForAllViewports(VIEWPORT_FLAG_RENDERING_INHIBITED, true);
+ 
+                     ReportProgress(0);
+-                    bool isScenario = ParkImporter::ExtensionIsScenario(hintPath);
++                    bool isScenario = ParkImporter::ExtensionIsScenario(Path::GetExtension(hintPath));
+                     auto parkImporter = ParkImporter::Create(hintPath);
+ 
+                     auto result = parkImporter->LoadFromStream(stream, isScenario);

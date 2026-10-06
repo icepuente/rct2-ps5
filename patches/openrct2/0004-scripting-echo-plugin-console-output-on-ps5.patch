@@ -1,0 +1,23 @@
+diff --git a/src/openrct2/scripting/bindings/game/ScConsole.hpp b/src/openrct2/scripting/bindings/game/ScConsole.hpp
+index 262dfbbc0a..eec704c80e 100644
+--- a/src/openrct2/scripting/bindings/game/ScConsole.hpp
++++ b/src/openrct2/scripting/bindings/game/ScConsole.hpp
+@@ -11,6 +11,7 @@
+ 
+ #ifdef ENABLE_SCRIPTING
+ 
++    #include "../../../core/Console.hpp"
+     #include "../../../interface/InteractiveConsole.h"
+     #include "../../ScriptEngine.h"
+ 
+@@ -41,6 +42,10 @@ namespace OpenRCT2::Scripting
+                     line += Stringify(ctx, argv[i]);
+                 }
+                 console->WriteLine(line);
++    #ifdef __PROSPERO__
++                // The PS5 port has no visible stdout; echo plugin output to the system log.
++                Console::WriteLine("%s", line.c_str());
++    #endif
+             }
+             return JS_UNDEFINED;
+         }

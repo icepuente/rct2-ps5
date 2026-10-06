@@ -1,10 +1,12 @@
 /*
  * Application heap for native PS5 titles.
  *
- * The libc heap a native title gets is far smaller than its flexible memory
- * budget (an 8 MB SDL surface already fails), so the allocation functions are
- * redirected (lld --wrap, see scripts/package-native.sh) to an mspace on a
- * large flexible memory mapping. Blocks that the console's libc allocated
+ * The libc heap a native title gets is tiny (an 8 MB SDL surface already
+ * fails), and flexible memory is capped at about 448 MiB, which OpenRCT2
+ * outgrows when it loads a large park. A game's real budget is direct memory,
+ * so the allocation functions are redirected (lld --wrap, see
+ * scripts/package-native.sh) to an mspace on a large direct memory mapping,
+ * falling back to flexible memory. Blocks that the console's libc allocated
  * itself (strdup, getline, ...) are recognised by address and handed back to
  * the original functions.
  */
@@ -13,6 +15,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/types.h>
 
 typedef void *SceLibcMspace;
 
@@ -27,6 +30,11 @@ size_t sceLibcMspaceMallocUsableSize(void *);
 
 int sceKernelAvailableFlexibleMemorySize(size_t *);
 int sceKernelMapNamedFlexibleMemory(void **, size_t, int, int, const char *);
+size_t sceKernelGetDirectMemorySize(void);
+int sceKernelAvailableDirectMemorySize(off_t, off_t, size_t, off_t *, size_t *);
+int sceKernelAllocateDirectMemory(off_t, off_t, size_t, size_t, int, off_t *);
+int sceKernelMapDirectMemory(void **, size_t, int, int, off_t, size_t);
+int sceKernelReleaseDirectMemory(off_t, size_t);
 int sceKernelDebugOutText(int, const char *);
 
 void *__real_malloc(size_t);
@@ -40,8 +48,12 @@ size_t __real_malloc_usable_size(void *);
 
 /* Flexible memory left to the console's libc and system modules. */
 #define SYSTEM_RESERVE ((size_t)64 << 20)
+/* Direct memory left for video buffers (SDL reserves 64 MiB) and the system. */
+#define DIRECT_RESERVE ((size_t)512 << 20)
+#define DIRECT_MAX ((size_t)4 << 30)
 #define MAP_ALIGN ((size_t)2 << 20)
 #define PROT_CPU_RW 0x3
+#define MEMORY_TYPE_WB_ONION 0 /* write-back, CPU cached */
 
 static SceLibcMspace heap;
 static uintptr_t heap_start, heap_end;
@@ -50,6 +62,33 @@ static atomic_int heap_state; /* 0 = not started, 1 = starting, 2 = ready, 3 = f
 static void heap_log(const char *msg)
 {
     sceKernelDebugOutText(0, msg);
+}
+
+/* Map as much direct memory as the title can spare, up to DIRECT_MAX. */
+static size_t map_direct(void **base)
+{
+    size_t total = sceKernelGetDirectMemorySize();
+    off_t start = 0;
+    size_t avail = 0;
+
+    if (total == 0 || sceKernelAvailableDirectMemorySize(0, (off_t)total, MAP_ALIGN, &start, &avail) != 0 ||
+        avail <= DIRECT_RESERVE) {
+        return 0;
+    }
+    size_t size = (avail - DIRECT_RESERVE) & ~(MAP_ALIGN - 1);
+    if (size > DIRECT_MAX) {
+        size = DIRECT_MAX;
+    }
+
+    off_t phys = 0;
+    if (sceKernelAllocateDirectMemory(0, (off_t)total, size, MAP_ALIGN, MEMORY_TYPE_WB_ONION, &phys) != 0) {
+        return 0;
+    }
+    if (sceKernelMapDirectMemory(base, size, PROT_CPU_RW, 0, phys, MAP_ALIGN) != 0) {
+        sceKernelReleaseDirectMemory(phys, size);
+        return 0;
+    }
+    return size;
 }
 
 static int heap_ready(void)
@@ -66,25 +105,30 @@ static int heap_ready(void)
         return state == 2;
     }
 
-    char msg[128];
-    size_t avail = 0;
+    char msg[160];
     void *base = NULL;
-    sceKernelAvailableFlexibleMemorySize(&avail);
-    size_t size = avail > SYSTEM_RESERVE ? (avail - SYSTEM_RESERVE) & ~(MAP_ALIGN - 1) : 0;
+    size_t size = map_direct(&base);
+    const char *kind = "direct";
 
-    if (size == 0 ||
-        sceKernelMapNamedFlexibleMemory(&base, size, PROT_CPU_RW, 0, "app heap") != 0 ||
-        !(heap = sceLibcMspaceCreate("app heap", base, size, 0))) {
-        snprintf(msg, sizeof(msg), "ps5_heap: failed (%zu MiB available), using libc heap\n",
-                 avail >> 20);
-        heap_log(msg);
+    if (size == 0) {
+        size_t avail = 0;
+        sceKernelAvailableFlexibleMemorySize(&avail);
+        size = avail > SYSTEM_RESERVE ? (avail - SYSTEM_RESERVE) & ~(MAP_ALIGN - 1) : 0;
+        if (size && sceKernelMapNamedFlexibleMemory(&base, size, PROT_CPU_RW, 0, "app heap") != 0) {
+            size = 0;
+        }
+        kind = "flexible";
+    }
+
+    if (size == 0 || !(heap = sceLibcMspaceCreate("app heap", base, size, 0))) {
+        heap_log("ps5_heap: failed, using libc heap\n");
         atomic_store(&heap_state, 3);
         return 0;
     }
 
     heap_start = (uintptr_t)base;
     heap_end = heap_start + size;
-    snprintf(msg, sizeof(msg), "ps5_heap: %zu MiB at %p\n", size >> 20, base);
+    snprintf(msg, sizeof(msg), "ps5_heap: %zu MiB of %s memory at %p\n", size >> 20, kind, base);
     heap_log(msg);
     atomic_store(&heap_state, 2);
     return 1;

@@ -89,6 +89,10 @@ Known limits:
 - **No on-screen keyboard yet.** Naming parks and rides with the PS5 keyboard dialog is untested.
 - **The "What's new" window is empty** on first launch, because OpenRCT2's `doc/` files aren't packaged.
 
+### Automated testing
+
+`OPENRCT2_PS5_AUTOTEST=1 scripts/build.sh openrct2` builds a title that installs [`ps5/autotest/ps5-autotest.js`](ps5/autotest/ps5-autotest.js). On the title screen, the plugin tours every installed scenario. It loads each one, runs it at the fastest speed for 20 seconds, and logs a line per scenario: whether it loaded, how fast the simulation ran, guests and rating. The tour repeats, with a summary after each pass. Leave the game on the title screen and read the results from the kernel log. Normal builds remove the plugin.
+
 To debug, build with `OPENRCT2_PS5_DEBUG=1 scripts/build.sh openrct2`. That adds OpenRCT2's verbose log and an SDL display trace. Launch **klogsrv** and read the log:
 
 ```bash
@@ -103,7 +107,7 @@ Plain elfldr payloads run in the background and can't show video or take control
 
 | File | Purpose |
 | --- | --- |
-| `ps5_heap.c` | An allocator on a large flexible-memory mapping. The default libc heap fails at 8 MB. |
+| `ps5_heap.c` | An allocator on up to 4 GiB of direct memory, falling back to flexible memory. The default libc heap fails at 8 MB, and flexible memory (about 448 MiB) is too small for large parks. |
 | `ps5_native_shims.c` | Lazy loading of modules a title doesn't preload (keyboard, IME, random). Replacements for functions only `libScePosixForWebKit` exports. stdout goes to the kernel log, and `exit()` asks the system to close the app. |
 | `ps5_libc_compat.c` | C-locale versions of the locale and libc functions that libc++ needs. |
 | `ps5_dirent.c` | `opendir`/`readdir` on the kernel's `getdents`. The console libc lists nothing for a title, and `getdents` needs a 64 KiB buffer. |
@@ -119,7 +123,9 @@ A few upstream fixes are carried as patches:
 - **ICU** ([`deps/icu`](deps/icu)): takes `wchar_t`'s size from the compiler. It's 2 bytes on the PS5 target, but ICU assumes 4 on BSD.
 - **OpenRCT2** ([`patches/openrct2`](patches/openrct2), applied at build time):
   - fixes the 2-byte `wchar_t` string conversions;
-  - fixes a double free when a WAV, OGG or FLAC stream fails to load.
+  - fixes a double free when a WAV, OGG or FLAC stream fails to load;
+  - lets title sequences load scenario files: the scenario check was given the whole file name instead of its extension;
+  - echoes plugin `console.log` output to stdout on PS5, for the autotest.
 
 ## Building and layout
 
@@ -142,7 +148,7 @@ native/      ps5-native-app-boilerplate (submodule)
 openrct2/    OpenRCT2 v0.5.5 (submodule)
 patches/     fixes applied to the OpenRCT2 source at build time
 platform/    runtime shims linked into every native title
-ps5/         OpenRCT2 launcher, title metadata, default config
+ps5/         OpenRCT2 launcher, title metadata, default config, autotest plugin
 scripts/     build, package, import check, upload and data install
 tools/       sdl-smoke (SDL2 test title), dmem-probe (payload memory probe),
              make-loading-screen.py (draws ps5/assets/loading.bmp)

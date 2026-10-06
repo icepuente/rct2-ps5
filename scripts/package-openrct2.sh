@@ -3,12 +3,15 @@
 # native title PPSA99702. Runs inside the toolchain container.
 #
 # OPENRCT2_PS5_DEBUG=1 adds OpenRCT2's verbose log and the SDL display trace
-# to the kernel log.
+# to the kernel log. OPENRCT2_PS5_AUTOTEST=1 installs the scenario tour plugin
+# (ps5/autotest/ps5-autotest.js), which runs on the title screen.
 set -euo pipefail
 
 DEBUG="${OPENRCT2_PS5_DEBUG:-0}"
+AUTOTEST="${OPENRCT2_PS5_AUTOTEST:-0}"
 DEBUG_CFLAGS=()
 [[ "${DEBUG}" == 1 ]] && DEBUG_CFLAGS+=(-DOPENRCT2_PS5_DEBUG)
+[[ "${AUTOTEST}" == 1 ]] && DEBUG_CFLAGS+=(-DOPENRCT2_PS5_AUTOTEST)
 
 TITLE_ID=PPSA99702
 BUILD=build/openrct2
@@ -34,6 +37,10 @@ mkdir -p "${STAGE}"
 cp -a "${DATA}" "${STAGE}/openrct2"
 rm -rf "${STAGE}/openrct2/shaders" # OpenGL only
 cp ps5/assets/config.ini ps5/assets/loading.bmp "${STAGE}/"
+if [[ "${AUTOTEST}" == 1 ]]; then
+    mkdir -p "${STAGE}/autotest"
+    cp ps5/autotest/ps5-autotest.js "${STAGE}/autotest/"
+fi
 
 PS5_SDL_APP=1 PS5_SDL_TRACE="${DEBUG}" scripts/package-native.sh "build/dist/${TITLE_ID}" ps5/sce_sys "${STAGE}" \
     "${WORK}/main.o" "${WORK}/Ui.cpp.o" "${UI_OBJS[@]}" \

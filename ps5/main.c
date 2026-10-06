@@ -5,7 +5,11 @@
  * files and the title's writable storage, then runs OpenRCT2's own main()
  * (renamed to openrct2_main by scripts/package-openrct2.sh).
  */
+#include <dirent.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <strings.h>
 #include <sys/stat.h>
 
 #include <SDL2/SDL.h>
@@ -29,6 +33,10 @@
  */
 #define CACHE_VERSION 5
 #define CACHE_VERSION_FILE USER_PATH "/ps5-cache-version"
+
+#define AUTOTEST_PLUGIN USER_PATH "/plugin/ps5-autotest.js"
+#define AUTOTEST_SOURCE "/app0/assets/autotest/ps5-autotest.js"
+#define AUTOTEST_SECONDS_PER_PARK 20
 
 int openrct2_main(int argc, const char **argv);
 
@@ -99,6 +107,70 @@ static void install_default_config(void)
     write_marker(CONFIG_VERSION_FILE, CONFIG_DEFAULTS_VERSION);
 }
 
+#ifdef OPENRCT2_PS5_AUTOTEST
+static int compare_names(const void *a, const void *b)
+{
+    return strcasecmp(*(const char *const *)a, *(const char *const *)b);
+}
+
+static int is_scenario(const char *name)
+{
+    const char *ext = strrchr(name, '.');
+    return ext && (strcasecmp(ext, ".sc6") == 0 || strcasecmp(ext, ".sea") == 0 ||
+                   strcasecmp(ext, ".park") == 0);
+}
+
+/*
+ * Install the scenario tour plugin (ps5/autotest/ps5-autotest.js), prefixed
+ * with the list of installed scenarios, which plugins cannot read themselves.
+ */
+static void install_autotest(void)
+{
+    char *names[512];
+    int count = 0;
+    DIR *dir = opendir(RCT2_PATH "/Scenarios");
+    struct dirent *entry;
+    while (dir && (entry = readdir(dir)) != NULL && count < 512) {
+        if (is_scenario(entry->d_name)) {
+            names[count++] = strdup(entry->d_name);
+        }
+    }
+    if (dir) {
+        closedir(dir);
+    }
+    qsort(names, count, sizeof(names[0]), compare_names);
+
+    mkdir(USER_PATH "/plugin", 0755);
+    FILE *in = fopen(AUTOTEST_SOURCE, "rb");
+    FILE *out = fopen(AUTOTEST_PLUGIN, "wb");
+    if (in && out) {
+        fprintf(out, "var PS5_AUTOTEST = { secondsPerPark: %d, scenarios: [\n",
+                AUTOTEST_SECONDS_PER_PARK);
+        for (int i = 0; i < count; i++) {
+            fprintf(out, "    \"%s/Scenarios/%s\",\n", RCT2_PATH, names[i]);
+        }
+        fprintf(out, "] };\n");
+        char buf[4096];
+        size_t n;
+        while ((n = fread(buf, 1, sizeof(buf), in)) > 0) {
+            fwrite(buf, 1, n, out);
+        }
+        printf("openrct2-ps5: autotest installed (%d scenarios)\n", count);
+    } else {
+        printf("openrct2-ps5: cannot install autotest\n");
+    }
+    if (in) {
+        fclose(in);
+    }
+    if (out) {
+        fclose(out);
+    }
+    for (int i = 0; i < count; i++) {
+        free(names[i]);
+    }
+}
+#endif
+
 /*
  * Show the loading screen until OpenRCT2 presents its first frame. The video
  * subsystem stays initialised, so the PS5 keeps displaying the last flipped
@@ -136,6 +208,11 @@ int main(void)
     mkdir(USER_PATH, 0755);
     install_default_config();
     reset_caches();
+#ifdef OPENRCT2_PS5_AUTOTEST
+    install_autotest();
+#else
+    remove(AUTOTEST_PLUGIN);
+#endif
 
     /* The PS5 SDL port only has the software renderer. */
     SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
